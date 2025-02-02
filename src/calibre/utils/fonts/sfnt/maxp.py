@@ -5,9 +5,9 @@ __license__   = 'GPL v3'
 __copyright__ = '2012, Kovid Goyal <kovid at kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-from struct import unpack_from, pack
+from struct import pack, unpack_from
 
-from calibre.utils.fonts.sfnt import UnknownTable, FixedProperty
+from calibre.utils.fonts.sfnt import FixedProperty, UnknownTable
 from calibre.utils.fonts.sfnt.errors import UnsupportedFont
 
 
@@ -23,8 +23,7 @@ class MaxpTable(UnknownTable):
         self.fields = ('_version', 'num_glyphs')
 
         if self.version > 1.0:
-            raise UnsupportedFont('This font has a maxp table with version: %s'
-                    %self.version)
+            raise UnsupportedFont(f'This font has a maxp table with version: {self.version}')
         if self.version == 1.0:
             self.fields = ('_version', 'num_glyphs', 'max_points',
                     'max_contours', 'max_composite_points',

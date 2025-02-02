@@ -7,9 +7,10 @@ __copyright__ = '2014, Kovid Goyal <kovid at kovidgoyal.net>'
 import re
 import sys
 from contextlib import contextmanager
-from css_parser import parseStyle
 from itertools import chain
 from operator import itemgetter
+
+from css_parser import parseStyle
 from qt.core import Qt, QTextCursor, QTextEdit
 
 from calibre import prepare_string_for_xml, xml_entity_to_unicode
@@ -20,12 +21,16 @@ from calibre.gui2 import error_dialog
 from calibre.gui2.tweak_book import current_container, tprefs
 from calibre.gui2.tweak_book.editor.smarts import NullSmarts
 from calibre.gui2.tweak_book.editor.smarts.utils import (
-    expand_tabs, get_leading_whitespace_on_block, get_text_after_cursor,
-    get_text_before_cursor, no_modifiers, smart_backspace, smart_home, smart_tab
+    expand_tabs,
+    get_leading_whitespace_on_block,
+    get_text_after_cursor,
+    get_text_before_cursor,
+    no_modifiers,
+    smart_backspace,
+    smart_home,
+    smart_tab,
 )
-from calibre.gui2.tweak_book.editor.syntax.html import (
-    ATTR_END, ATTR_NAME, ATTR_START, ATTR_VALUE
-)
+from calibre.gui2.tweak_book.editor.syntax.html import ATTR_END, ATTR_NAME, ATTR_START, ATTR_VALUE
 from calibre.utils.icu import utf16_length
 
 get_offset = itemgetter(0)
@@ -45,8 +50,9 @@ class Tag:
         self.self_closing = self_closing
 
     def __repr__(self):
-        return '<{} start_block={} start_offset={} end_block={} end_offset={} self_closing={}>'.format(
-            self.name, self.start_block.blockNumber(), self.start_offset, self.end_block.blockNumber(), self.end_offset, self.self_closing)
+        return (
+            f'<{self.name} start_block={self.start_block.blockNumber()} start_offset={self.start_offset} '
+            f'end_block={self.end_block.blockNumber()} end_offset={self.end_offset} self_closing={self.self_closing}>')
     __str__ = __repr__
 
 
@@ -236,13 +242,13 @@ def rename_tag(cursor, opening_tag, closing_tag, new_name, insert=False):
         if insert:
             text = f'</{new_name}>{text}'
         else:
-            text = re.sub(r'^<\s*/\s*[a-zA-Z0-9]+', '</%s' % new_name, text)
+            text = re.sub(r'^<\s*/\s*[a-zA-Z0-9]+', f'</{new_name}', text)
         cursor.insertText(text)
         text = select_tag(cursor, opening_tag)
         if insert:
-            text += '<%s>' % new_name
+            text += f'<{new_name}>'
         else:
-            text = re.sub(r'^<\s*[a-zA-Z0-9]+', '<%s' % new_name, text)
+            text = re.sub(r'^<\s*[a-zA-Z0-9]+', f'<{new_name}', text)
         cursor.insertText(text)
 
 
@@ -310,7 +316,7 @@ def set_style_property(tag, property_name, value, editor):
         d = parseStyle('')
         d.setProperty(property_name, value)
         c.setPosition(tag.end_block.position() + tag.end_offset)
-        c.insertText(' style="%s"' % css(d))
+        c.insertText(f' style="{css(d)}"')
     else:
         c.setPosition(block.position() + offset - 1)
         end_block, end_offset = find_end_of_attribute(block, offset + 1)
@@ -321,7 +327,7 @@ def set_style_property(tag, property_name, value, editor):
         c.setPosition(end_block.position() + end_offset, QTextCursor.MoveMode.KeepAnchor)
         d = parseStyle(editor.selected_text_from_cursor(c)[1:-1])
         d.setProperty(property_name, value)
-        c.insertText('"%s"' % css(d))
+        c.insertText(f'"{css(d)}"')
 
 
 entity_pat = re.compile(r'&(#{0,1}[a-zA-Z0-9]{1,8});$')
@@ -480,6 +486,7 @@ class Smarts(NullSmarts):
         template = template.replace('_TEXT_', text or '')
         editor.highlighter.join()
         c = editor.textCursor()
+        c.beginEditBlock()
         if c.hasSelection():
             c.insertText('')  # delete any existing selected text
         ensure_not_within_tag_definition(c)
@@ -487,6 +494,7 @@ class Smarts(NullSmarts):
         c.insertText(template)
         c.setPosition(p)  # ensure cursor is positioned inside the newly created tag
         editor.setTextCursor(c)
+        c.endEditBlock()
 
     def insert_tag(self, editor, name):
         m = re.match(r'[a-zA-Z0-9:-]+', name)
@@ -498,8 +506,10 @@ class Smarts(NullSmarts):
         text = self.get_smart_selection(editor, update=True)
         c = editor.textCursor()
         pos = min(c.position(), c.anchor())
+        sellen = abs(c.position() - c.anchor())
         c.insertText(f'{opent}{text}{close}')
         c.setPosition(pos + len(opent))
+        c.setPosition(c.position() + sellen, QTextCursor.MoveMode.KeepAnchor)
         editor.setTextCursor(c)
 
     def verify_for_spellcheck(self, cursor, highlighter):
@@ -723,7 +733,7 @@ class Smarts(NullSmarts):
         if key == Qt.Key.Key_Home and smart_home(editor, ev):
             return True
 
-        if key == Qt.Key.Key_Tab:
+        if key in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab):
             if not mods & Qt.KeyboardModifier.ControlModifier and smart_tab(editor, ev):
                 return True
 
@@ -775,7 +785,7 @@ class Smarts(NullSmarts):
         tag = find_closest_containing_tag(block, offset - 1, max_tags=4000)
         if tag is None:
             return False
-        c.insertText('/%s>' % tag.name)
+        c.insertText(f'/{tag.name}>')
         editor.setTextCursor(c)
         return True
 
@@ -911,6 +921,6 @@ if __name__ == '__main__':  # {{{
 
     def callback(ed):
         import regex
-        ed.find_text(regex.compile('A bold word'))
+        ed.find_text(regex.compile(r'A bold word'))
     launch_editor(raw, path_is_raw=True, syntax='html', callback=callback)
 # }}}

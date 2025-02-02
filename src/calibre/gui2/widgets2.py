@@ -3,20 +3,62 @@
 
 
 import weakref
+
 from qt.core import (
-    QApplication, QBrush, QByteArray, QCalendarWidget, QCheckBox, QColor, QColorDialog,
-    QComboBox, QDate, QDateTime, QDateTimeEdit, QDialog, QDialogButtonBox, QFont,
-    QFontInfo, QFontMetrics, QFrame, QIcon, QKeySequence, QLabel, QLayout, QMenu,
-    QMimeData, QPainter, QPalette, QPixmap, QPoint, QPushButton, QRect, QScrollArea,
-    QSize, QSizePolicy, QStyle, QStyledItemDelegate, QStyleOptionToolButton,
-    QStylePainter, Qt, QTabWidget, QTextBrowser, QTextCursor, QTimer, QToolButton,
-    QUndoCommand, QUndoStack, QUrl, QWidget, pyqtSignal,
+    QApplication,
+    QBrush,
+    QByteArray,
+    QCalendarWidget,
+    QCheckBox,
+    QColor,
+    QColorDialog,
+    QComboBox,
+    QDate,
+    QDateTime,
+    QDateTimeEdit,
+    QDialog,
+    QDialogButtonBox,
+    QFont,
+    QFontInfo,
+    QFontMetrics,
+    QFrame,
+    QIcon,
+    QKeySequence,
+    QLabel,
+    QLayout,
+    QMenu,
+    QMimeData,
+    QPainter,
+    QPalette,
+    QPixmap,
+    QPoint,
+    QPushButton,
+    QRect,
+    QScrollArea,
+    QSize,
+    QSizePolicy,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionToolButton,
+    QStylePainter,
+    Qt,
+    QTabWidget,
+    QTextBrowser,
+    QTextCursor,
+    QTextDocument,
+    QTimer,
+    QToolButton,
+    QUndoCommand,
+    QUndoStack,
+    QUrl,
+    QWidget,
+    pyqtSignal,
 )
 
 from calibre import prepare_string_for_xml
 from calibre.constants import builtin_colors_dark, builtin_colors_light
 from calibre.ebooks.metadata import rating_to_stars
-from calibre.gui2 import UNDEFINED_QDATETIME, gprefs, rating_font
+from calibre.gui2 import UNDEFINED_QDATETIME, gprefs, local_path_for_resource, rating_font
 from calibre.gui2.complete2 import EditWithComplete, LineEdit
 from calibre.gui2.widgets import history
 from calibre.utils.config_base import tweaks
@@ -169,7 +211,7 @@ class CenteredToolButton(RightClickButton):
         self.setIcon(icon)
         self.setSizePolicy(QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed))
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.text_flags =  Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignCenter
+        self.text_flags = Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignCenter
 
     def paintEvent(self, ev):
         painter = QStylePainter(self)
@@ -197,7 +239,6 @@ class CenteredToolButton(RightClickButton):
 
 
 class Dialog(QDialog):
-
     '''
     An improved version of Qt's QDialog class. This automatically remembers the
     last used size, automatically connects the signals for QDialogButtonBox,
@@ -341,7 +382,7 @@ class RatingEditor(QComboBox):
             self.redo()
             return ev.accept()
         k = ev.key()
-        num = {getattr(Qt, 'Key_%d'%i):i for i in range(6)}.get(k)
+        num = {getattr(Qt, f'Key_{i}'):i for i in range(6)}.get(k)
         if num is None:
             return QComboBox.keyPressEvent(self, ev)
         ev.accept()
@@ -518,9 +559,11 @@ class Separator(QWidget):  # {{{
 class HTMLDisplay(QTextBrowser):
 
     anchor_clicked = pyqtSignal(object)
+    notes_resource_scheme = ''  # set to scheme to use to load resources for notes from the current db
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, save_resources_in_document=True):
         QTextBrowser.__init__(self, parent)
+        self.save_resources_in_document = save_resources_in_document
         self.last_set_html = ''
         self.default_css = self.external_css = ''
         app = QApplication.instance()
@@ -541,6 +584,9 @@ class HTMLDisplay(QTextBrowser):
         self.setAcceptDrops(False)
         self.anchorClicked.connect(self.on_anchor_clicked)
 
+    def get_base_qurl(self):
+        return None
+
     def setHtml(self, html):
         self.last_set_html = html
         QTextBrowser.setHtml(self, html)
@@ -554,7 +600,7 @@ class HTMLDisplay(QTextBrowser):
         if app.is_dark_theme:
             pal = app.palette()
             col = pal.color(QPalette.ColorRole.Link)
-            self.default_css = 'a { color: %s }\n\n' % col.name(QColor.NameFormat.HexRgb)
+            self.default_css = f'a {{ color: {col.name(QColor.NameFormat.HexRgb)} }}\n\n'
         else:
             self.default_css = ''
         self.document().setDefaultStyleSheet(self.default_css + self.process_external_css(self.external_css))
@@ -571,26 +617,64 @@ class HTMLDisplay(QTextBrowser):
                 return
         self.anchor_clicked.emit(qurl)
 
-    def loadResource(self, rtype, qurl):
-        if qurl.isLocalFile():
-            path = qurl.toLocalFile()
-            try:
-                with open(path, 'rb') as f:
-                    data = f.read()
-            except OSError:
-                if path.rpartition('.')[-1].lower() in {'jpg', 'jpeg', 'gif', 'png', 'bmp', 'webp'}:
-                    return QByteArray(bytearray.fromhex(
-                        '89504e470d0a1a0a0000000d49484452'
-                        '000000010000000108060000001f15c4'
-                        '890000000a49444154789c6300010000'
-                        '0500010d0a2db40000000049454e44ae'
-                        '426082'))
-            else:
-                return QByteArray(data)
-        elif qurl.scheme() == 'calibre-icon':
-            return QIcon.icon_as_png(qurl.path().lstrip('/'), as_bytearray=True)
+    def load_local_file_resource(self, rtype, qurl, path):
+        from calibre.utils.filenames import make_long_path_useable
+        try:
+            with open(make_long_path_useable(path), 'rb') as f:
+                data = f.read()
+        except OSError:
+            if path.rpartition('.')[-1].lower() in {'jpg', 'jpeg', 'gif', 'png', 'bmp', 'webp'}:
+                r = QByteArray(bytearray.fromhex(
+                    '89504e470d0a1a0a0000000d49484452'
+                    '000000010000000108060000001f15c4'
+                    '890000000a49444154789c6300010000'
+                    '0500010d0a2db40000000049454e44ae'
+                    '426082'))
+                if self.save_resources_in_document:
+                    self.document().addResource(rtype, qurl, r)
+                return r
         else:
-            return QTextBrowser.loadResource(self, rtype, qurl)
+            r = QByteArray(data)
+            if self.save_resources_in_document:
+                self.document().addResource(rtype, qurl, r)
+            return r
+        return super().loadResource(rtype, qurl)
+
+    def loadResource(self, rtype, qurl):
+        path = local_path_for_resource(qurl, base_qurl=self.get_base_qurl())
+        if path:
+            return self.load_local_file_resource(rtype, qurl, path)
+        if qurl.scheme() == 'calibre-icon':
+            r = QIcon.icon_as_png(qurl.path().lstrip('/'), as_bytearray=True)
+            self.document().addResource(rtype, qurl, r)
+            return r
+        if self.notes_resource_scheme and qurl.scheme() == self.notes_resource_scheme and int(rtype) == int(QTextDocument.ResourceType.ImageResource):
+            from calibre.gui2.ui import get_gui
+            gui = get_gui()
+            if gui is not None:
+                db = gui.current_db.new_api
+                resource = db.get_notes_resource(f'{qurl.host()}:{qurl.path()[1:]}')
+                if resource is not None:
+                    r = QByteArray(resource['data'])
+                    if self.save_resources_in_document:
+                        self.document().addResource(rtype, qurl, r)
+                    return r
+        else:
+            return super().loadResource(rtype, qurl)
+
+    def anchorAt(self, pos):
+        # Anchors in a document can be "focused" with the tab key.
+        # Unfortunately, the focus point that Qt provides when using the context
+        # menu key can be 1 pixel out of the anchor's focus rectangle. We
+        # correct for that here by checking if there is an anchor under the
+        # point, moving the point a pixel one direction then the other if there
+        # isn't. This process also slightly dejitters the mouse FWIW.
+        url = super().anchorAt(pos)
+        if not url:
+            url = super().anchorAt(QPoint(pos.x()-1, pos.y()-1))
+        if not url:
+            url = super().anchorAt(QPoint(pos.x()+1, pos.y()+1))
+        return url
 
 
 class ScrollingTabWidget(QTabWidget):
@@ -612,7 +696,7 @@ class ScrollingTabWidget(QTabWidget):
         sw.setWidget(page)
         sw.setWidgetResizable(True)
         page.setAutoFillBackground(False)
-        sw.setStyleSheet('#%s { background: transparent }' % name)
+        sw.setStyleSheet(f'#{name} {{ background: transparent }}')
         return sw
 
     def indexOf(self, page):
@@ -662,6 +746,12 @@ class DateTimeEdit(QDateTimeEdit):
         self.setMinimumDateTime(UNDEFINED_QDATETIME)
         self.setCalendarPopup(True)
         self.cw = CalendarWidget(self)
+        if tweaks['calendar_start_day_of_week'] != 'Default':
+            try:
+                dow = Qt.DayOfWeek[tweaks['calendar_start_day_of_week']]
+                self.cw.setFirstDayOfWeek(dow)
+            except Exception:
+                print(f"Bad value for tweak calendar_start_day_of_week: {tweaks['calendar_start_day_of_week']}")
         self.cw.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
         self.setCalendarWidget(self.cw)
         self.setSpecialValueText(_('Undefined'))
@@ -777,13 +867,12 @@ class MessagePopup(QLabel):
         self.resize(self.sizeHint())
         self.position_in_parent()
         self.show()
-        self.raise_()
+        self.raise_without_focus()
         self.close_timer.start(timeout)
 
     def position_in_parent(self):
         p = self.parent()
         self.move((p.width() - self.width()) // 2, self.OFFSET_FROM_TOP)
-
 
 
 if __name__ == '__main__':

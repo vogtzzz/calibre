@@ -2,17 +2,18 @@
 # License: GPLv3 Copyright: 2016, Kovid Goyal <kovid at kovidgoyal.net>
 
 
-import os, time
-from itertools import count
-from collections import namedtuple, deque
+import os
+import time
+from collections import deque, namedtuple
 from functools import partial
-from threading import RLock, Thread, Event
+from itertools import count
+from threading import Event, RLock, Thread
 
 from calibre import detect_ncpus, force_unicode
+from calibre.utils.ipc.simple_worker import WorkerError, fork_job
 from calibre.utils.monotonic import monotonic
-from calibre.utils.ipc.simple_worker import fork_job, WorkerError
-from polyglot.queue import Queue, Empty
 from polyglot.builtins import iteritems, itervalues
+from polyglot.queue import Empty, Queue
 
 StartEvent = namedtuple('StartEvent', 'job_id name module function args kwargs callback data')
 DoneEvent = namedtuple('DoneEvent', 'job_id')
@@ -23,7 +24,7 @@ class Job(Thread):
     daemon = True
 
     def __init__(self, start_event, events_queue):
-        Thread.__init__(self, name='JobsMonitor%s' % start_event.job_id)
+        Thread.__init__(self, name=f'JobsMonitor{start_event.job_id}')
         self.abort_event = Event()
         self.events_queue = events_queue
         self.job_name = start_event.name

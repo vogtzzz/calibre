@@ -1,10 +1,10 @@
 import re
 
-from lxml.html import tostring
 import lxml.html
+from lxml.html import tostring
 
-from calibre.ebooks.readability.cleaners import normalize_spaces, clean_attributes
 from calibre.ebooks.chardet import xml_to_unicode
+from calibre.ebooks.readability.cleaners import clean_attributes, normalize_spaces
 from polyglot.builtins import iteritems
 
 
@@ -24,9 +24,9 @@ def normalize_entities(cur_title):
         '\u2013':'-',
         '&mdash;': '-',
         '&ndash;': '-',
-        '\u00A0': ' ',
-        '\u00AB': '"',
-        '\u00BB': '"',
+        '\u00a0': ' ',
+        '\u00ab': '"',
+        '\u00bb': '"',
         '&quot;': '"',
     }
     for c, r in iteritems(entities):

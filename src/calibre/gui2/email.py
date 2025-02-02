@@ -12,11 +12,9 @@ import time
 from collections import defaultdict
 from functools import partial
 from itertools import repeat
-from qt.core import (
-    QDialog, QDialogButtonBox, QGridLayout, QIcon, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QPushButton, Qt,
-)
 from threading import Thread
+
+from qt.core import QDialog, QDialogButtonBox, QGridLayout, QIcon, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, Qt
 
 from calibre.constants import preferred_encoding
 from calibre.customize.ui import available_input_formats, available_output_formats
@@ -27,9 +25,8 @@ from calibre.library.save_to_disk import get_components
 from calibre.utils.config import prefs, tweaks
 from calibre.utils.icu import primary_sort_key
 from calibre.utils.resources import get_image_path as I
-from calibre.utils.smtp import (
-    compose_mail, config as email_config, extract_email_address, sendmail,
-)
+from calibre.utils.smtp import compose_mail, extract_email_address, sendmail
+from calibre.utils.smtp import config as email_config
 from polyglot.binary import from_hex_unicode
 from polyglot.builtins import iteritems, itervalues
 
@@ -79,8 +76,7 @@ class Sendmail:
         try_count = 0
         while True:
             if try_count > 0:
-                log('\nRetrying in %d seconds...\n' %
-                        self.rate_limit)
+                log(f'\nRetrying in {self.rate_limit} seconds...\n')
             worker = Worker(self.sendmail,
                     (attachment, aname, to, subject, text, log))
             worker.start()
@@ -93,8 +89,7 @@ class Sendmail:
                 if time.time() - start_time > self.TIMEOUT:
                     log('Sending timed out')
                     raise Exception(
-                            'Sending email %r to %r timed out, aborting'% (subject,
-                                to))
+                            f'Sending email {subject!r} to {to!r} timed out, aborting')
             if worker.exception is None:
                 log('Email successfully sent')
                 return
@@ -108,7 +103,7 @@ class Sendmail:
         logged = False
         while time.time() - self.last_send_time <= self.rate_limit:
             if not logged and self.rate_limit > 0:
-                log('Waiting %s seconds before sending, to avoid being marked as spam.\nYou can control this delay via Preferences->Tweaks' % self.rate_limit)
+                log(f'Waiting {self.rate_limit} seconds before sending, to avoid being marked as spam.\nYou can control this delay via Preferences->Tweaks')
                 logged = True
             time.sleep(1)
         try:
@@ -170,11 +165,10 @@ def send_mails(jobnames, callback, attachments, to_s, subjects,
             # irony that they are called "tech" companies.
             # https://bugs.launchpad.net/calibre/+bug/1989282
             from calibre.utils.short_uuid import uuid4
-            if is_for_kindle(to):
+            if not is_for_kindle(to):
+                # Amazon nowadays reads metadata from attachment filename instead of
+                # file internal metadata so dont nuke the filename.
                 # https://www.mobileread.com/forums/showthread.php?t=349290
-                from calibre.utils.filenames import ascii_filename
-                aname = ascii_filename(aname)
-            else:
                 aname = f'{uuid4()}.' + aname.rpartition('.')[-1]
             subject = uuid4()
             text = uuid4()
@@ -497,7 +491,7 @@ class EmailMixin:  # {{{
                     self.iactions['Convert Books'].auto_convert_mail(to, fmts, delete_from_library, auto, format, subject)
 
         if bad:
-            bad = '\n'.join('%s'%(i,) for i in bad)
+            bad = '\n'.join(f'{i}' for i in bad)
             d = warning_dialog(self, _('No suitable formats'),
                 _('Could not email the following books '
                 'as no suitable formats were found:'), bad)
@@ -540,12 +534,12 @@ class EmailMixin:  # {{{
                 get_fmts, self.email_sent, self.job_manager)
         if sent_mails:
             self.status_bar.show_message(_('Sent news to')+' '+
-                    ', '.join(sent_mails),  3000)
+                    ', '.join(sent_mails), 3000)
 
 # }}}
 
 
 if __name__ == '__main__':
     from qt.core import QApplication
-    app = QApplication([])  # noqa
+    app = QApplication([])  # noqa: F841
     print(select_recipients())

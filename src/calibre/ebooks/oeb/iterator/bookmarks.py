@@ -5,7 +5,8 @@ __license__   = 'GPL v3'
 __copyright__ = '2012, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import os, numbers
+import numbers
+import os
 from io import BytesIO
 
 from calibre.utils.zipfile import safe_replace
@@ -56,7 +57,7 @@ class BookmarksMixin:
         dat = []
         for bm in bookmarks:
             if bm['type'] == 'legacy':
-                rec = '%s^%d#%s'%(bm['title'], bm['spine'], bm['pos'])
+                rec = f"{bm['title']}^{bm['spine']}#{bm['pos']}"
             else:
                 pos = bm['pos']
                 if isinstance(pos, numbers.Number):

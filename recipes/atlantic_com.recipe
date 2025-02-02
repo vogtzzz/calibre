@@ -4,14 +4,15 @@
 import json
 from xml.sax.saxutils import escape, quoteattr
 
-from calibre.web.feeds.news import BasicNewsRecipe, prefixed_classes as prefix_classes, classes
+from calibre.web.feeds.news import BasicNewsRecipe, classes
+from calibre.web.feeds.news import prefixed_classes as prefix_classes
 
 web_version = True
 test_article = None
 # test_article = 'https://www.theatlantic.com/health/archive/2020/12/covid-19-second-surge/617415/?utm_source=feed'
 
 
-# {{{ parse article JSON
+# parse article JSON {{{
 def process_image_block(lines, block):
     caption = block.get('captionText')
     caption_lines = []

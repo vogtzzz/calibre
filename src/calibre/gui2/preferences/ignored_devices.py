@@ -4,9 +4,7 @@
 
 import textwrap
 
-from qt.core import (
-    QIcon, QLabel, QListWidget, QListWidgetItem, QPushButton, Qt, QVBoxLayout
-)
+from qt.core import QIcon, QLabel, QListWidget, QListWidgetItem, QPushButton, Qt, QVBoxLayout
 
 from calibre.customize.ui import enable_plugin
 from calibre.gui2 import gprefs
@@ -69,7 +67,7 @@ class ConfigWidget(ConfigWidgetBase):
         self.devices.clear()
         for dev in self.gui.device_manager.devices:
             for d, name in iteritems(dev.get_user_blacklisted_devices()):
-                item = QListWidgetItem('%s [%s]'%(name, d), self.devices)
+                item = QListWidgetItem(f'{name} [{d}]', self.devices)
                 item.setData(Qt.ItemDataRole.UserRole, (dev, d))
                 item.setFlags(Qt.ItemFlag.ItemIsEnabled|Qt.ItemFlag.ItemIsUserCheckable|Qt.ItemFlag.ItemIsSelectable)
                 item.setCheckState(Qt.CheckState.Checked)
@@ -92,7 +90,7 @@ class ConfigWidget(ConfigWidgetBase):
 
     def commit(self):
         devs = {}
-        for i in range(0, self.devices.count()):
+        for i in range(self.devices.count()):
             e = self.devices.item(i)
             dev, uid = e.data(Qt.ItemDataRole.UserRole)
             if dev not in devs:

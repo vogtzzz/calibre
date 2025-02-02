@@ -16,7 +16,8 @@ from math import ceil
 from multiprocessing import Pipe
 from threading import Thread
 
-from calibre import detect_ncpus as cpu_count, force_unicode
+from calibre import detect_ncpus as cpu_count
+from calibre import force_unicode
 from calibre.constants import DEBUG
 from calibre.ptempfile import base_dir
 from calibre.utils.ipc import eintr_retry_call
@@ -26,7 +27,6 @@ from calibre.utils.serialize import pickle_loads
 from polyglot.binary import as_hex_unicode
 from polyglot.builtins import environ_item, string_or_bytes
 from polyglot.queue import Empty, Queue
-
 
 server_counter = count()
 _name_counter = count()
@@ -118,7 +118,7 @@ class Server(Thread):
     def launch_worker(self, gui=False, redirect_output=None, job_name=None):
         start = time.monotonic()
         id = next(self.launched_worker_counter)
-        fd, rfile = tempfile.mkstemp(prefix='ipc_result_%d_%d_'%(self.id, id),
+        fd, rfile = tempfile.mkstemp(prefix=f'ipc_result_{self.id}_{id}_',
                 dir=base_dir(), suffix='.pickle')
         os.close(fd)
         if redirect_output is None:
@@ -136,7 +136,7 @@ class Server(Thread):
         with a:
             env = {
                 'CALIBRE_WORKER_FD': str(a.fileno()),
-                'CALIBRE_WORKER_RESULT' : environ_item(as_hex_unicode(rfile))
+                'CALIBRE_WORKER_RESULT': environ_item(as_hex_unicode(rfile))
             }
             w = Worker(env, gui=gui, job_name=job_name)
 

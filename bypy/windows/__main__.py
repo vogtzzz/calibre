@@ -15,14 +15,10 @@ import subprocess
 import sys
 import zipfile
 
-from bypy.constants import (
-    CL, LINK, MT, PREFIX, RC, SIGNTOOL, SRC as CALIBRE_DIR, SW, build_dir,
-    python_major_minor_version, worker_env
-)
-from bypy.freeze import (
-    cleanup_site_packages, extract_extension_modules, freeze_python,
-    path_to_freeze_dir
-)
+from bypy.constants import CL, LINK, MT, PREFIX, RC, SIGNTOOL, SW, build_dir, python_major_minor_version, worker_env
+from bypy.constants import SRC as CALIBRE_DIR
+from bypy.freeze import cleanup_site_packages, extract_extension_modules, freeze_python, path_to_freeze_dir
+from bypy.pkgs.piper import copy_piper_dir
 from bypy.utils import mkdtemp, py_compile, run, walk
 
 iv = globals()['init_env']
@@ -128,10 +124,10 @@ def freeze(env, ext_dir, incdir):
 
     printf('\tAdding misc binary deps')
 
-    def copybin(x):
-        shutil.copy2(x, env.dll_dir)
+    def copybin(x, dest=env.dll_dir):
+        shutil.copy2(x, dest)
         with contextlib.suppress(FileNotFoundError):
-            shutil.copy2(x + '.manifest', env.dll_dir)
+            shutil.copy2(x + '.manifest', dest)
 
     bindir = os.path.join(PREFIX, 'bin')
     for x in ('pdftohtml', 'pdfinfo', 'pdftoppm', 'pdftotext', 'jpegtran-calibre', 'cjpeg-calibre', 'optipng-calibre', 'cwebp-calibre', 'JXRDecApp-calibre'):
@@ -139,6 +135,13 @@ def freeze(env, ext_dir, incdir):
     for f in glob.glob(os.path.join(bindir, '*.dll')):
         if re.search(r'(easylzma|icutest)', f.lower()) is None:
             copybin(f)
+    ossm = os.path.join(env.dll_dir, 'ossl-modules')
+    os.mkdir(ossm)
+    for f in glob.glob(os.path.join(PREFIX, 'lib', 'ossl-modules', '*.dll')):
+        copybin(f, ossm)
+    for f in glob.glob(os.path.join(PREFIX, 'ffmpeg', 'bin', '*.dll')):
+        copybin(f)
+    copy_piper_dir(PREFIX, env.dll_dir)
 
     copybin(os.path.join(env.python_base, 'python%s.dll' % env.py_ver.replace('.', '')))
     copybin(os.path.join(env.python_base, 'python%s.dll' % env.py_ver[0]))
@@ -315,6 +318,7 @@ def build_portable_installer(env):
         'Ole32.lib', 'Shlwapi.lib', 'Kernel32.lib', 'Psapi.lib']
     run(*cmd)
     os.remove(zf)
+    os.remove(manifest)
 
 
 def build_portable(env):
@@ -326,6 +330,7 @@ def build_portable(env):
     src = j(root, 'portable.cpp')
     obj = j(env.obj_dir, b(src) + '.obj')
     cflags = '/c /EHsc /MT /W3 /Ox /nologo /D_UNICODE /DUNICODE'.split()
+    launchers = []
 
     for exe_name in ('calibre.exe', 'ebook-viewer.exe', 'ebook-edit.exe'):
         exe = j(base, exe_name.replace('.exe', '-portable.exe'))
@@ -346,6 +351,8 @@ def build_portable(env):
             '/OUT:' + exe, embed_resources(env, exe, desc=desc, product_description=desc),
             obj, 'User32.lib', 'Shell32.lib']
         run(*cmd)
+        launchers.append(exe)
+        sign_files(env, launchers)
 
     printf('Creating portable installer')
     shutil.copytree(env.base, j(base, 'Calibre'))
@@ -370,12 +377,18 @@ def sign_files(env, files):
             'https://calibre-ebook.com', '/f', CODESIGN_CERT, '/p', pw, '/tr']
 
     def runcmd(cmd):
-        for timeserver in ('http://sha256timestamp.ws.symantec.com/sha256/timestamp', 'http://timestamp.comodoca.com/rfc3161',):
+        # See https://gist.github.com/Manouchehri/fd754e402d98430243455713efada710 for list of timestamp servers
+        for timeserver in (
+            'http://timestamp.acs.microsoft.com/',  # this is Microsoft Azure Code Signing
+            'http://rfc3161.ai.moda/windows',  # this is a load balancer
+            'http://timestamp.comodoca.com/rfc3161',
+            'http://timestamp.sectigo.com'
+        ):
             try:
                 subprocess.check_call(cmd + [timeserver] + list(files))
                 break
             except subprocess.CalledProcessError:
-                print('Signing failed, retrying with different timestamp server')
+                print(f'Signing failed with timestamp server {timeserver}, retrying with different timestamp server')
         else:
             raise SystemExit('Signing failed')
 
@@ -571,7 +584,7 @@ def main():
         run_tests(os.path.join(env.base, 'calibre-debug.exe'), env.base)
     if args.sign_installers:
         sign_executables(env)
-    create_installer(env)
+    create_installer(env, args.compression_level)
     build_portable(env)
     build_portable_installer(env)
     if args.sign_installers:

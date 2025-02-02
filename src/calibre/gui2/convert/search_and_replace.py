@@ -2,18 +2,18 @@ __license__ = 'GPL 3'
 __copyright__ = '2011, John Schember <john@nachtimwald.com>, 2012 Eli Algranti <idea00@hotmail.com>'
 __docformat__ = 'restructuredtext en'
 
-import codecs, json
+import codecs
+import json
 
 from qt.core import Qt, QTableWidgetItem
 
-from calibre.gui2.convert.search_and_replace_ui import Ui_Form
-from calibre.gui2.convert import Widget
-from calibre.gui2 import (error_dialog, question_dialog, choose_files,
-        choose_save_file)
 from calibre import as_unicode
-from calibre.utils.localization import localize_user_manual_link
-from calibre.ebooks.conversion.search_replace import compile_regular_expression
 from calibre.ebooks.conversion.config import OPTIONS
+from calibre.ebooks.conversion.search_replace import compile_regular_expression
+from calibre.gui2 import choose_files, choose_save_file, error_dialog, question_dialog
+from calibre.gui2.convert import Widget
+from calibre.gui2.convert.search_and_replace_ui import Ui_Form
+from calibre.utils.localization import localize_user_manual_link
 
 
 class SearchAndReplaceWidget(Widget, Ui_Form):
@@ -28,7 +28,7 @@ class SearchAndReplaceWidget(Widget, Ui_Form):
         # Dummy attributes to fool the Widget() option handler code. We handle
         # everything in our *handler methods.
         for i in range(1, 4):
-            x = 'sr%d_'%i
+            x = f'sr{i}_'
             for y in ('search', 'replace'):
                 z = x + y
                 setattr(self, 'opt_'+z, z)
@@ -79,10 +79,10 @@ class SearchAndReplaceWidget(Widget, Ui_Form):
         self.search_replace.setRowCount(row + 1)
         newItem = self.search_replace.itemPrototype().clone()
         newItem.setText(search)
-        self.search_replace.setItem(row,0, newItem)
+        self.search_replace.setItem(row, 0, newItem)
         newItem = self.search_replace.itemPrototype().clone()
         newItem.setText(replace)
-        self.search_replace.setItem(row,1, newItem)
+        self.search_replace.setItem(row, 1, newItem)
         return row
 
     def sr_change_clicked(self):
@@ -139,7 +139,7 @@ class SearchAndReplaceWidget(Widget, Ui_Form):
 
     def cell_rearrange(self, i):
         row = self.search_replace.currentRow()
-        for col in range(0, self.search_replace.columnCount()):
+        for col in range(self.search_replace.columnCount()):
             item1 = self.search_replace.item(row, col)
             item2 = self.search_replace.item(row+i, col)
             value = item1.text()
@@ -147,7 +147,7 @@ class SearchAndReplaceWidget(Widget, Ui_Form):
             item2.setText(value)
         self.search_replace.setCurrentCell(row+i, 0)
 
-    def sr_currentCellChanged(self, row, column, previousRow, previousColumn) :
+    def sr_currentCellChanged(self, row, column, previousRow, previousColumn):
         if row >= 0:
             self.sr_change.setEnabled(True)
             self.sr_remove.setEnabled(True)
@@ -227,9 +227,9 @@ class SearchAndReplaceWidget(Widget, Ui_Form):
 
     def get_definitions(self):
         ans = []
-        for row in range(0, self.search_replace.rowCount()):
+        for row in range(self.search_replace.rowCount()):
             colItems = []
-            for col in range(0, self.search_replace.columnCount()):
+            for col in range(self.search_replace.columnCount()):
                 colItems.append(str(self.search_replace.item(row, col).text()))
             ans.append(colItems)
         return ans
@@ -254,7 +254,7 @@ class SearchAndReplaceWidget(Widget, Ui_Form):
             for col, cellValue in enumerate(colItems):
                 newItem = self.search_replace.itemPrototype().clone()
                 newItem.setText(cellValue)
-                self.search_replace.setItem(row,col, newItem)
+                self.search_replace.setItem(row, col, newItem)
         return True
 
     def apply_recommendations(self, recs):
@@ -282,7 +282,7 @@ class SearchAndReplaceWidget(Widget, Ui_Form):
         self.set_value(self.opt_search_replace, None)
         if new_val is None and legacy:
             for i in range(1, 4):
-                x = 'sr%d'%i
+                x = f'sr{i}'
                 s, r = x+'_search', x+'_replace'
                 s, r = legacy.get(s, ''), legacy.get(r, '')
                 if s:

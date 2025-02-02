@@ -17,7 +17,8 @@ from io import BytesIO
 from threading import Thread
 
 from calibre.srv.utils import ServerLog
-from calibre.utils.resources import get_image_path as I, get_path as P
+from calibre.utils.resources import get_image_path as I
+from calibre.utils.resources import get_path as P
 from polyglot import http_client
 
 rmtree = partial(shutil.rmtree, ignore_errors=True)
@@ -95,7 +96,7 @@ class LibraryBaseTest(BaseTest):
         return dest
 
     def create_server(self, *args, **kwargs):
-        args = (self.library_path ,) + args
+        args = (self.library_path,) + args
         return LibraryServer(*args, **kwargs)
 
 
@@ -143,6 +144,7 @@ class TestServer(Thread):
             self.log.error('Failed to stop server with error:', e)
         self.join(self.loop.opts.shutdown_timeout)
         self.loop.close_control_connection()
+        self.log.close()
 
     def connect(self, timeout=None, interface=None):
         if timeout is None:

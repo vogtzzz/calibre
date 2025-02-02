@@ -7,13 +7,32 @@ __license__   = 'GPL v3'
 
 import os
 import weakref
-from qt.core import (
-    QApplication, QCheckBox, QCursor, QDialog, QDialogButtonBox, QGridLayout,
-    QHBoxLayout, QIcon, QLabel, QLineEdit, QProgressBar, QPushButton,
-    QStackedLayout, Qt, QTextEdit, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
-    QWidget, pyqtSignal, QSplitter, QToolButton
-)
 from threading import Thread
+
+from qt.core import (
+    QApplication,
+    QCheckBox,
+    QCursor,
+    QDialog,
+    QDialogButtonBox,
+    QGridLayout,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QLineEdit,
+    QProgressBar,
+    QPushButton,
+    QSplitter,
+    QStackedLayout,
+    Qt,
+    QTextEdit,
+    QToolButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
+)
 
 from calibre import as_unicode, prints
 from calibre.gui2 import open_local_file
@@ -52,6 +71,15 @@ class DBCheck(QDialog):  # {{{
             ' depending on the size of the Full text database.'))
         la.setWordWrap(True)
         l.addWidget(la)
+
+        self.notes = n = QCheckBox(_('Also compact the notes database'))
+        l.addWidget(n)
+        la = QLabel('<p style="margin-left: 20px; font-style: italic">' + _(
+            'This can be a very slow and memory intensive operation,'
+            ' depending on the size of the notes database.'))
+        la.setWordWrap(True)
+        l.addWidget(la)
+
         l.addStretch(10)
         self.bb1 = bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
         l.addWidget(bb)
@@ -70,6 +98,7 @@ class DBCheck(QDialog):  # {{{
         l.addStretch(10)
         self.resize(self.sizeHint())
         self.db = weakref.ref(db.new_api)
+        self.setMinimumWidth(450)
 
     def start(self):
         self.setWindowTitle(_('Vacuuming...'))
@@ -77,12 +106,12 @@ class DBCheck(QDialog):  # {{{
         QApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
         self.vacuum_started = True
         db = self.db()
-        t = self.thread = Thread(target=self.vacuum, args=(db, self.fts.isChecked()), daemon=True, name='VacuumDB')
+        t = self.thread = Thread(target=self.vacuum, args=(db, self.fts.isChecked(), self.notes.isChecked()), daemon=True, name='VacuumDB')
         t.start()
 
-    def vacuum(self, db, include_fts_db):
+    def vacuum(self, db, include_fts_db, include_notes_db):
         try:
-            db.vacuum(include_fts_db)
+            db.vacuum(include_fts_db, include_notes_db)
         except Exception as e:
             import traceback
             self.error = (as_unicode(e), traceback.format_exc())
@@ -392,22 +421,22 @@ class CheckLibraryDialog(QDialog):
             self.log.blockSignals(True)
             if col:
                 node.setCheckState(col, to_what)
-            for i in range(0, node.childCount()):
+            for i in range(node.childCount()):
                 node.child(i).setCheckState(2, to_what)
             self.log.blockSignals(False)
 
         def is_child_delete_checked(node):
             checked = False
             all_checked = True
-            for i in range(0, node.childCount()):
+            for i in range(node.childCount()):
                 c = node.child(i).checkState(2)
                 checked = checked or c == Qt.CheckState.Checked
                 all_checked = all_checked and c == Qt.CheckState.Checked
-            return (checked, all_checked)
+            return checked, all_checked
 
         def any_child_delete_checked():
             for parent in self.top_level_items.values():
-                (c, _) = is_child_delete_checked(parent)
+                c, _ = is_child_delete_checked(parent)
                 if c:
                     return True
             return False
@@ -435,7 +464,7 @@ class CheckLibraryDialog(QDialog):
         else:
             for parent in self.top_level_items.values():
                 if parent.data(2, Qt.ItemDataRole.UserRole) == self.is_deletable:
-                    (child_chkd, all_chkd) = is_child_delete_checked(parent)
+                    child_chkd, all_chkd = is_child_delete_checked(parent)
                     if all_chkd and child_chkd:
                         check_state = Qt.CheckState.Checked
                     elif child_chkd:
@@ -493,7 +522,7 @@ class CheckLibraryDialog(QDialog):
     def fix_missing_formats(self):
         tl = self.top_level_items['missing_formats']
         child_count = tl.childCount()
-        for i in range(0, child_count):
+        for i in range(child_count):
             item = tl.child(i)
             id = int(item.data(0, Qt.ItemDataRole.UserRole))
             all = self.db.formats(id, index_is_id=True, verify_formats=False)
@@ -506,7 +535,7 @@ class CheckLibraryDialog(QDialog):
     def fix_missing_covers(self):
         tl = self.top_level_items['missing_covers']
         child_count = tl.childCount()
-        for i in range(0, child_count):
+        for i in range(child_count):
             item = tl.child(i)
             id = int(item.data(0, Qt.ItemDataRole.UserRole))
             self.db.set_has_cover(id, False)
@@ -514,7 +543,7 @@ class CheckLibraryDialog(QDialog):
     def fix_extra_covers(self):
         tl = self.top_level_items['extra_covers']
         child_count = tl.childCount()
-        for i in range(0, child_count):
+        for i in range(child_count):
             item = tl.child(i)
             id = int(item.data(0, Qt.ItemDataRole.UserRole))
             self.db.set_has_cover(id, True)

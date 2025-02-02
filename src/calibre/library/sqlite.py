@@ -7,24 +7,25 @@ Wrapper for multi-threaded access to a single sqlite database connection. Serial
 all calls.
 '''
 
-import sqlite3 as sqlite, traceback, time, uuid, os
-from sqlite3 import IntegrityError, OperationalError
-from threading import Thread
-from threading import RLock
+import os
+import sqlite3 as sqlite
+import time
+import traceback
+import uuid
 from datetime import datetime, timezone
 from functools import partial
+from sqlite3 import IntegrityError, OperationalError
+from threading import RLock, Thread
 
-from calibre.ebooks.metadata import title_sort, author_to_author_sort
-from calibre.utils.date import parse_date, isoformat, local_tz, UNDEFINED_DATE
-from calibre import isbytestring, force_unicode
-from calibre.constants import iswindows, DEBUG, plugins_loc, plugins
+from calibre import force_unicode, isbytestring, prints
+from calibre.constants import DEBUG, iswindows, plugins, plugins_loc
+from calibre.ebooks.metadata import author_to_author_sort, title_sort
+from calibre.utils.date import UNDEFINED_DATE, isoformat, local_tz, parse_date
 from calibre.utils.icu import sort_key
 from calibre_extensions import speedup as _c_speedup
-from calibre import prints
-from polyglot.builtins import cmp, native_string_type
 from polyglot import reprlib
+from polyglot.builtins import cmp, native_string_type
 from polyglot.queue import Queue
-
 
 global_lock = RLock()
 
@@ -83,7 +84,7 @@ def convert_bool(val):
     return val != '0'
 
 
-sqlite.register_adapter(bool, lambda x : 1 if x else 0)
+sqlite.register_adapter(bool, lambda x: 1 if x else 0)
 sqlite.register_converter(native_string_type('bool'), convert_bool)
 sqlite.register_converter(native_string_type('BOOL'), convert_bool)
 
@@ -160,7 +161,7 @@ class IdentifiersConcat:
         self.ans = []
 
     def step(self, key, val):
-        self.ans.append('%s:%s'%(key, val))
+        self.ans.append(f'{key}:{val}')
 
     def finalize(self):
         try:
@@ -257,7 +258,7 @@ def do_connect(path, row_factory=None):
     conn.create_aggregate('sortconcat_amper', 2, SortedConcatenateAmper)
     conn.create_aggregate('identifiers_concat', 2, IdentifiersConcat)
     load_c_extensions(conn)
-    conn.row_factory = sqlite.Row if row_factory else (lambda cursor, row : list(row))
+    conn.row_factory = sqlite.Row if row_factory else (lambda cursor, row: list(row))
     conn.create_aggregate('concat', 1, Concatenate)
     conn.create_aggregate('aum_sortconcat', 4, AumSortedConcatenate)
     conn.create_collation(native_string_type('PYNOCASE'), partial(pynocase,
@@ -265,7 +266,7 @@ def do_connect(path, row_factory=None):
     conn.create_function('title_sort', 1, title_sort)
     conn.create_function('author_to_author_sort', 1,
             _author_to_author_sort)
-    conn.create_function('uuid4', 0, lambda : str(uuid.uuid4()))
+    conn.create_function('uuid4', 0, lambda: str(uuid.uuid4()))
     # Dummy functions for dynamically created filters
     conn.create_function('books_list_filter', 1, lambda x: 1)
     conn.create_collation(native_string_type('icucollate'), icu_collator)

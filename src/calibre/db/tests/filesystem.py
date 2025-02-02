@@ -5,12 +5,19 @@ __license__   = 'GPL v3'
 __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import unittest, os, time
+import os
+import time
+import unittest
 from io import BytesIO
 
 from calibre.constants import iswindows
 from calibre.db.tests.base import BaseTest
 from calibre.ptempfile import TemporaryDirectory
+
+
+def read(x, mode='r'):
+    with open(x, mode) as f:
+        return f.read()
 
 
 class FilesystemTest(BaseTest):
@@ -82,8 +89,8 @@ class FilesystemTest(BaseTest):
         def side_data(book_id=1):
             bookdir = os.path.dirname(cache.format_abspath(book_id, '__COVER_INTERNAL__'))
             return {
-                'a.side': open(os.path.join(bookdir, 'a.side')).read(),
-                'a.fmt1': open(os.path.join(bookdir, 'subdir', 'a.fmt1')).read(),
+                'a.side': read(os.path.join(bookdir, 'a.side')),
+                'a.fmt1': read(os.path.join(bookdir, 'subdir', 'a.fmt1')),
             }
 
         def check_that_filesystem_and_db_entries_match(book_id):
@@ -153,7 +160,6 @@ class FilesystemTest(BaseTest):
         self.assertEqual(cache.rename_extra_files(1, {'B': 'data/c'}), set())
         self.assertEqual(cache.rename_extra_files(1, {'B': 'data/c'}, replace=True), {'B'})
 
-
     @unittest.skipUnless(iswindows, 'Windows only')
     def test_windows_atomic_move(self):
         'Test book file open in another process when changing metadata'
@@ -169,7 +175,7 @@ class FilesystemTest(BaseTest):
 
         # Test on folder with hardlinks
         from calibre.ptempfile import TemporaryDirectory
-        from calibre.utils.filenames import hardlink_file, WindowsAtomicFolderMove
+        from calibre.utils.filenames import WindowsAtomicFolderMove, hardlink_file
         raw = b'xxx'
         with TemporaryDirectory() as tdir1, TemporaryDirectory() as tdir2:
             a, b = os.path.join(tdir1, 'a'), os.path.join(tdir1, 'b')
@@ -183,8 +189,8 @@ class FilesystemTest(BaseTest):
             wam.delete_originals()
             self.assertEqual([], os.listdir(tdir1))
             self.assertEqual({'a', 'b'}, set(os.listdir(tdir2)))
-            self.assertEqual(raw, open(os.path.join(tdir2, 'a'), 'rb').read())
-            self.assertEqual(raw, open(os.path.join(tdir2, 'b'), 'rb').read())
+            self.assertEqual(raw, read(os.path.join(tdir2, 'a'), 'rb'))
+            self.assertEqual(raw, read(os.path.join(tdir2, 'b'), 'rb'))
 
     def test_library_move(self):
         ' Test moving of library '
@@ -239,6 +245,21 @@ class FilesystemTest(BaseTest):
     def test_export_import(self):
         from calibre.db.cache import import_library
         from calibre.utils.exim import Exporter, Importer
+        with TemporaryDirectory('export_lib') as tdir:
+            for part_size in (8, 1, 1024):
+                exporter = Exporter(tdir, part_size=part_size + Exporter.tail_size())
+                files = {
+                    'a': b'a' * 7, 'b': b'b' * 7, 'c': b'c' * 2, 'd': b'd' * 9, 'e': b'e' * 3,
+                }
+                for key, data in files.items():
+                    exporter.add_file(BytesIO(data), key)
+                exporter.commit()
+                importer = Importer(tdir)
+                for key, expected in files.items():
+                    with importer.start_file(key, key) as f:
+                        actual = f.read()
+                    self.assertEqual(expected, actual, key)
+                self.assertFalse(importer.corrupted_files)
         cache = self.init_cache()
         bookdir = os.path.dirname(cache.format_abspath(1, '__COVER_INTERNAL__'))
         with open(os.path.join(bookdir, 'exf'), 'w') as f:
@@ -248,22 +269,26 @@ class FilesystemTest(BaseTest):
             f.write('recurse')
         self.assertEqual({ef.relpath for ef in cache.list_extra_files(1, pattern='sub/**/*')}, {'sub/recurse'})
         self.assertEqual({ef.relpath for ef in cache.list_extra_files(1)}, {'exf', 'sub/recurse'})
-        for part_size in (1 << 30, 100, 1):
+        for part_size in (512, 1027, None):
             with TemporaryDirectory('export_lib') as tdir, TemporaryDirectory('import_lib') as idir:
-                exporter = Exporter(tdir, part_size=part_size)
+                exporter = Exporter(tdir, part_size=part_size if part_size is None else (part_size + Exporter.tail_size()))
                 cache.export_library('l', exporter)
                 exporter.commit()
                 importer = Importer(tdir)
                 ic = import_library('l', importer, idir)
+                self.assertFalse(importer.corrupted_files)
                 self.assertEqual(cache.all_book_ids(), ic.all_book_ids())
                 for book_id in cache.all_book_ids():
-                    self.assertEqual(cache.cover(book_id), ic.cover(book_id), 'Covers not identical for book: %d' % book_id)
+                    self.assertEqual(cache.cover(book_id), ic.cover(book_id), f'Covers not identical for book: {book_id}')
                     for fmt in cache.formats(book_id):
                         self.assertEqual(cache.format(book_id, fmt), ic.format(book_id, fmt))
                         self.assertEqual(cache.format_metadata(book_id, fmt)['mtime'], cache.format_metadata(book_id, fmt)['mtime'])
                 bookdir = os.path.dirname(ic.format_abspath(1, '__COVER_INTERNAL__'))
-                self.assertEqual('exf', open(os.path.join(bookdir, 'exf')).read())
-                self.assertEqual('recurse', open(os.path.join(bookdir, 'sub', 'recurse')).read())
+                self.assertEqual('exf', read(os.path.join(bookdir, 'exf')))
+                self.assertEqual('recurse', read(os.path.join(bookdir, 'sub', 'recurse')))
+        r1 = cache.add_notes_resource(b'res1', 'res.jpg', mtime=time.time()-113)
+        r2 = cache.add_notes_resource(b'res2', 'res.jpg', mtime=time.time()-1115)
+        cache.set_notes_for('authors', 2, 'some notes', resource_hashes=(r1, r2))
         cache.add_format(1, 'TXT', BytesIO(b'testing exim'))
         cache.fts_indexing_sleep_time = 0.001
         cache.enable_fts()
@@ -280,10 +305,16 @@ class FilesystemTest(BaseTest):
             exporter.commit()
             importer = Importer(tdir)
             ic = import_library('l', importer, idir)
+            self.assertFalse(importer.corrupted_files)
             self.assertEqual(ic.fts_search('exim')[0]['id'], 1)
+            self.assertEqual(cache.notes_for('authors', 2), ic.notes_for('authors', 2))
+            a, b = cache.get_notes_resource(r1), ic.get_notes_resource(r1)
+            at, bt, = a.pop('mtime'), b.pop('mtime')
+            self.assertEqual(a, b)
+            self.assertLess(abs(at-bt), 2)
 
     def test_find_books_in_directory(self):
-        from calibre.db.adding import find_books_in_directory, compile_rule
+        from calibre.db.adding import compile_rule, find_books_in_directory
         def strip(files):
             return frozenset({os.path.basename(x) for x in files})
 

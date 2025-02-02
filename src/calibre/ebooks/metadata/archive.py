@@ -60,6 +60,7 @@ class KPFExtract(FileTypePlugin):
                 of.write(zf.read(candidates[0]))
         return of.name
 
+
 class RAR:
 
     def __init__(self, archive):
@@ -193,8 +194,9 @@ def get_comic_book_info(d, mi, series_index='volume'):
         mi.comments = comments.strip()
     pubm, puby = d.get('publicationMonth', None), d.get('publicationYear', None)
     if puby is not None:
-        from calibre.utils.date import parse_only_date
         from datetime import date
+
+        from calibre.utils.date import parse_only_date
         try:
             dt = date(puby, 6 if pubm is None else pubm, 15)
             dt = parse_only_date(str(dt))
@@ -205,8 +207,9 @@ def get_comic_book_info(d, mi, series_index='volume'):
 
 def parse_comic_comment(comment, series_index='volume'):
     # See http://code.google.com/p/comicbookinfo/wiki/Example
-    from calibre.ebooks.metadata import MetaInformation
     import json
+
+    from calibre.ebooks.metadata import MetaInformation
     mi = MetaInformation(None, None)
     m = json.loads(comment)
     if isinstance(m, dict):
@@ -240,7 +243,7 @@ def get_comic_images(path, tdir, first=1, last=0):  # first and last use 1 based
     if fmt == 'rar':
         from calibre.utils.unrar import headers
         for h in headers(path):
-            items[h['filename']] = lambda : partial(h.get, 'file_time', 0)
+            items[h['filename']] = lambda: partial(h.get, 'file_time', 0)
     else:
         from zipfile import ZipFile
         with ZipFile(path) as zf:

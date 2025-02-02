@@ -12,9 +12,7 @@ from calibre import force_unicode, prepare_string_for_xml
 from calibre.constants import filesystem_encoding
 from calibre.db.constants import DATA_DIR_NAME
 from calibre.ebooks.metadata import fmt_sidx, rating_to_stars
-from calibre.ebooks.metadata.search_internet import (
-    DEFAULT_AUTHOR_SOURCE, name_for, qquote, url_for_author_search, url_for_book_search,
-)
+from calibre.ebooks.metadata.search_internet import DEFAULT_AUTHOR_SOURCE, name_for, qquote, url_for_author_search, url_for_book_search
 from calibre.ebooks.metadata.sources.identify import urls_from_identifiers
 from calibre.library.comments import comments_to_html, markdown
 from calibre.utils.date import format_date, is_date_undefined
@@ -68,6 +66,10 @@ def search_action_with_data(search_term, value, book_id, field=None, **k):
     return search_action(search_term, value, field=field, book_id=book_id, **k)
 
 
+def notes_action(**keys):
+    return 'notes:' + as_hex_unicode(json_dumps(keys))
+
+
 DEFAULT_AUTHOR_LINK = f'search-{DEFAULT_AUTHOR_SOURCE}'
 
 
@@ -89,28 +91,51 @@ def author_search_href(which, title=None, author=None):
     return func(key, title=title, author=author), tt
 
 
+def render_author_link(default_author_link, author, book_title=None, author_sort=None):
+    book_title = book_title or ''
+    if default_author_link.startswith('search-'):
+        which_src = default_author_link.partition('-')[2]
+        link, lt = author_search_href(which_src, title=book_title, author=author)
+    else:
+        formatter = EvalFormatter()
+        vals = {'author': qquote(author), 'title': qquote(book_title), 'author_sort': qquote(author_sort or author)}
+        link = lt = formatter.safe_format(default_author_link, vals, '', vals)
+    return link, lt
+
+
 def mi_to_html(
         mi,
         field_list=None, default_author_link=None, use_roman_numbers=True,
         rating_font='Liberation Serif', rtl=False, comments_heading_pos='hide',
-        for_qt=False, vertical_fields=(), show_links=True,
+        for_qt=False, vertical_fields=(), show_links=True, item_id_if_has_note=None,
+        link_note_icon_size=16
     ):
 
-    link_markup =  '↗️'
+    link_markup = '↗️'
     if for_qt:
-        link_markup = '<img valign="bottom" src="calibre-icon:///external-link.png" width=16 height=16>'
+        s = link_note_icon_size
+        link_markup = f'<img valign="bottom" src="calibre-icon:///external-link.png" width={s} height={s}>'
+        note_markup = f'<img valign="bottom" src="calibre-icon:///notes.png" width={s} height={s}>'
     def get_link_map(column):
         try:
             return mi.link_maps[column]
         except Exception:
             return {}
 
-    def add_other_link(field, field_value):
+    def add_other_links(field, field_value):
         if show_links:
             link = get_link_map(field).get(field_value)
             if link:
                 link = prepare_string_for_xml(link, True)
-                return ' <a title="{0}: {1}" href="{1}">{2}</a>'.format(_('Click to open'), link, link_markup)
+                link = ' <a title="{0}: {1}" href="{1}">{2}</a>'.format(_('Click to open'), link, link_markup)
+            else:
+                link = ''
+            note = ''
+            item_id = None if item_id_if_has_note is None else item_id_if_has_note(field, field_value)
+            if item_id is not None:
+                note = ' <a title="{}" href="{}">{}</a>'.format(
+                    _('Show notes for: {}').format(field_value), notes_action(field=field, value=field_value, item_id=item_id), note_markup)
+            return link + note
         return ''
 
     if field_list is None:
@@ -157,9 +182,9 @@ def mi_to_html(
                 ctype = disp.get('interpret_as') or 'html'
                 val = force_unicode(val)
                 if ctype == 'long-text':
-                    val = '<pre style="white-space:pre-wrap">%s</pre>' % p(val)
+                    val = f'<pre style="white-space:pre-wrap">{p(val)}</pre>'
                 elif ctype == 'short-text':
-                    val = '<span>%s</span>' % p(val)
+                    val = f'<span>{p(val)}</span>'
                 elif ctype == 'markdown':
                     val = markdown(val)
                 else:
@@ -176,9 +201,8 @@ def mi_to_html(
             if val:
                 star_string = rating_to_stars(val, disp.get('allow_half_stars', False))
                 ans.append((field,
-                    '<td class="title">%s</td><td class="rating value" '
-                    'style=\'font-family:"%s"\'>%s</td>'%(
-                        name, rating_font, star_string)))
+                    f'<td class="title">{name}</td><td class="rating value" '
+                    f'style=\'font-family:"{rating_font}"\'>{star_string}</td>'))
         elif metadata['datatype'] == 'composite' and not disp.get('composite_show_in_comments', ''):
             val = getattr(mi, field)
             if val:
@@ -211,8 +235,7 @@ def mi_to_html(
                     durl = path
                     if durl.startswith('mtp:::'):
                         durl = ':::'.join((durl.split(':::'))[2:])
-                    extra = '<br><span style="font-size:smaller">%s</span>'%(
-                            prepare_string_for_xml(durl))
+                    extra = f'<br><span style="font-size:smaller">{prepare_string_for_xml(durl)}</span>'
                 if show_links:
                     num_of_folders = 1
                     if isdevice:
@@ -226,8 +249,7 @@ def mi_to_html(
                                     break
                         text = _('Book files')
                         name = ngettext('Folder', 'Folders', num_of_folders) + title_sep
-                    links = ['<a href="{}" title="{}">{}</a>{}'.format(action(scheme, book_id=book_id, loc=loc),
-                        prepare_string_for_xml(path, True), text, extra)]
+                    links = [f'<a href="{action(scheme, book_id=book_id, loc=loc)}" title="{prepare_string_for_xml(path, True)}">{text}</a>{extra}']
                     if num_of_folders > 1:
                         links.append('<a href="{}" title="{}">{}</a>'.format(
                             action('data-path', book_id=book_id, loc=book_id),
@@ -270,29 +292,19 @@ def mi_to_html(
                 ans.append((field, row % (_('Ids')+title_sep, links)))
         elif field == 'authors':
             authors = []
-            formatter = EvalFormatter()
             for aut in mi.authors:
                 link = ''
                 if show_links:
                     if default_author_link:
-                        if default_author_link.startswith('search-'):
-                            which_src = default_author_link.partition('-')[2]
-                            link, lt = author_search_href(which_src, title=mi.title, author=aut)
-                        else:
-                            vals = {'author': qquote(aut), 'title': qquote(mi.title)}
-                            try:
-                                vals['author_sort'] =  qquote(mi.author_sort_map[aut])
-                            except KeyError:
-                                vals['author_sort'] = qquote(aut)
-                            link = lt = formatter.safe_format(default_author_link, vals, '', vals)
+                        link, lt = render_author_link(default_author_link, aut, mi.title, mi.author_sort_map.get(aut) or aut)
                     else:
                         aut = p(aut)
                 if link:
-                    val = '<a title="%s" href="%s">%s</a>'%(a(lt), action('author', book_id=book_id,
+                    val = '<a title="{}" href="{}">{}</a>'.format(a(lt), action('author', book_id=book_id,
                                                               url=link, name=aut, title=lt), aut)
                 else:
                     val = aut
-                val += add_other_link('authors', aut)
+                val += add_other_links('authors', aut)
                 authors.append(val)
             ans.append((field, row % (name, value_list(' & ', authors))))
         elif field == 'languages':
@@ -311,7 +323,7 @@ def mi_to_html(
                     search_action_with_data('publisher', mi.publisher, book_id),
                     _('Click to see books with {0}: {1}').format(metadata['name'], a(mi.publisher)),
                     p(mi.publisher))
-                val += add_other_link('publisher', mi.publisher)
+                val += add_other_links('publisher', mi.publisher)
             else:
                 val = p(mi.publisher)
             ans.append((field, row % (name, val)))
@@ -340,10 +352,10 @@ def mi_to_html(
                     val = _(
                         '%(sidx)s of <a href="%(href)s" title="%(tt)s">'
                         '<span class="%(cls)s">%(series)s</span></a>') % dict(
-                            sidx=fmt_sidx(sidx, use_roman=use_roman_numbers), cls="series_name",
+                            sidx=fmt_sidx(sidx, use_roman=use_roman_numbers), cls='series_name',
                             series=p(series), href=search_action_with_data(st, series, book_id, field),
                             tt=p(_('Click to see books in this series')))
-                    val += add_other_link(field, series)
+                    val += add_other_links(field, series)
                 elif metadata['datatype'] == 'datetime':
                     aval = getattr(mi, field)
                     if is_date_undefined(aval):
@@ -372,7 +384,7 @@ def mi_to_html(
                         v = '<a href="{}" title="{}">{}</a>'.format(
                             search_action_with_data(st, x, book_id, field), _('Click to see books with {0}: {1}').format(
                             metadata['name'] or field, a(x)), p(x))
-                        v += add_other_link(field, x)
+                        v += add_other_links(field, x)
                         links.append(v)
                     val = value_list(metadata['is_multiple']['list_to_ui'], links)
                 elif metadata['datatype'] == 'text' or metadata['datatype'] == 'enumeration':
@@ -384,7 +396,7 @@ def mi_to_html(
                     v = '<a href="{}" title="{}">{}</a>'.format(
                         search_action_with_data(st, unescaped_val, book_id, field), a(
                             _('Click to see books with {0}: {1}').format(metadata['name'] or field, val)), val)
-                    val = v + add_other_link(field, val)
+                    val = v + add_other_links(field, val)
                 elif metadata['datatype'] == 'bool':
                     val = '<a href="{}" title="{}">{}</a>'.format(
                         search_action_with_data(field, val, book_id, None), a(
@@ -420,11 +432,11 @@ def mi_to_html(
             dt = mi.metadata_for_field(field)['datatype']
         except:
             dt = 'text'
-        return 'datatype_%s'%dt
+        return f'datatype_{dt}'
 
-    ans = ['<tr id="%s" class="%s">%s</tr>'%(fieldl.replace('#', '_'),
+    ans = ['<tr id="{}" class="{}">{}</tr>'.format(fieldl.replace('#', '_'),
         classname(fieldl), html) for fieldl, html in ans]
-    # print '\n'.join(ans)
+    # print('\n'.join(ans))
     direction = 'rtl' if rtl else 'ltr'
     rans = f'<table class="fields" style="direction: {direction}; '
     if not for_qt:

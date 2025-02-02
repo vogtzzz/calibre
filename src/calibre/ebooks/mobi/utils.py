@@ -5,15 +5,19 @@ __license__   = 'GPL v3'
 __copyright__ = '2011, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import struct, string, zlib, os
+import os
+import string
+import struct
+import zlib
 from collections import OrderedDict
 from io import BytesIO
 
-from calibre.utils.img import save_cover_data_to, scale_image, image_to_data, image_from_data, resize_image, png_data_to_gif_data
-from calibre.utils.imghdr import what
-from calibre.ebooks import normalize
-from polyglot.builtins import as_bytes
 from tinycss.color3 import parse_color_string
+
+from calibre.ebooks import normalize
+from calibre.utils.img import image_from_data, image_to_data, png_data_to_gif_data, resize_image, save_cover_data_to, scale_image
+from calibre.utils.imghdr import what
+from polyglot.builtins import as_bytes
 
 IMAGE_MAX_SIZE = 10 * 1024 * 1024
 RECORD_SIZE = 0x1000  # 4096 (Text record size (uncompressed))
@@ -152,8 +156,7 @@ def test_decint(num):
         raw = encint(num, forward=d)
         sz = len(raw)
         if (num, sz) != decint(raw, forward=d):
-            raise ValueError('Failed for num %d, forward=%r: %r != %r' % (
-                num, d, (num, sz), decint(raw, forward=d)))
+            raise ValueError(f'Failed for num {num}, forward={d!r}: {num, sz!r} != {decint(raw, forward=d)!r}')
 
 
 def rescale_image(data, maxsizeb=IMAGE_MAX_SIZE, dimen=None):
@@ -420,8 +423,8 @@ def mobify_image(data):
         data = png_data_to_gif_data(data)
     return data
 
-# Font records {{{
 
+# Font records {{{
 
 def read_font_record(data, extent=1040):
     '''
@@ -484,7 +487,7 @@ def read_font_record(data, extent=1040):
         try:
             font_data = zlib.decompress(font_data)
         except Exception as e:
-            ans['err'] = 'Failed to zlib decompress font data (%s)'%e
+            ans['err'] = f'Failed to zlib decompress font data ({e})'
             return ans
 
         if len(font_data) != usize:
@@ -643,4 +646,4 @@ def convert_color_for_font_tag(val):
     def clamp(x):
         return min(x, max(0, x), 1)
     rgb = map(clamp, rgba[:3])
-    return '#' + ''.join(map(lambda x:'%02x' % int(x * 255), rgb))
+    return '#' + ''.join(f'{int(x * 255):02x}' for x in rgb)

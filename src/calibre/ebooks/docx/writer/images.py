@@ -8,11 +8,12 @@ import os
 import posixpath
 from collections import namedtuple
 from functools import partial
+
 from lxml import etree
 
 from calibre import fit_image
 from calibre.ebooks.docx.images import pt_to_emu
-from calibre.ebooks.docx.names import USE_LOCAL_DPI_URI, SVG_BLIP_URI
+from calibre.ebooks.docx.names import SVG_BLIP_URI, USE_LOCAL_DPI_URI
 from calibre.ebooks.oeb.base import urlquote, urlunquote
 from calibre.utils.filenames import ascii_filename
 from calibre.utils.imghdr import identify
@@ -73,7 +74,7 @@ class ImagesManager:
             try:
                 fmt, width, height = identify(item.data)
             except Exception:
-                self.log.warning('Replacing corrupted image with blank: %s' % href)
+                self.log.warning(f'Replacing corrupted image with blank: {href}')
                 item.data = I('blank.png', data=True, allow_user_override=False)
                 fmt, width, height = identify(item.data)
             image_fname = 'media/' + self.create_filename(href, fmt)
@@ -144,8 +145,8 @@ class ImagesManager:
             parent = makeelement(ans, 'wp:anchor', **get_image_margins(style))
             # The next three lines are boilerplate that Word requires, even
             # though the DOCX specs define defaults for all of them
-            parent.set('simplePos', '0'), parent.set('relativeHeight', '1'), parent.set('behindDoc',"0"), parent.set('locked', "0")
-            parent.set('layoutInCell', "1"), parent.set('allowOverlap', '1')
+            parent.set('simplePos', '0'), parent.set('relativeHeight', '1'), parent.set('behindDoc','0'), parent.set('locked', '0')
+            parent.set('layoutInCell', '1'), parent.set('allowOverlap', '1')
             makeelement(parent, 'wp:simplePos', x='0', y='0')
             makeelement(makeelement(parent, 'wp:positionH', relativeFrom='margin'), 'wp:align').text = floating
             makeelement(makeelement(parent, 'wp:positionV', relativeFrom='line'), 'wp:align').text = 'top'
@@ -168,7 +169,7 @@ class ImagesManager:
     def create_docx_image_markup(self, parent, name, alt, img_rid, width, height, svg_rid=''):
         makeelement, namespaces = self.document_relationships.namespace.makeelement, self.document_relationships.namespace.namespaces
         makeelement(parent, 'wp:docPr', id=str(self.count), name=name, descr=alt)
-        makeelement(makeelement(parent, 'wp:cNvGraphicFramePr'), 'a:graphicFrameLocks', noChangeAspect="1")
+        makeelement(makeelement(parent, 'wp:cNvGraphicFramePr'), 'a:graphicFrameLocks', noChangeAspect='1')
         g = makeelement(parent, 'a:graphic')
         gd = makeelement(g, 'a:graphicData', uri=namespaces['pic'])
         pic = makeelement(gd, 'pic:pic')
@@ -230,8 +231,8 @@ class ImagesManager:
         root = etree.Element('root', nsmap=namespaces)
         ans = makeelement(root, 'w:drawing', append=False)
         parent = makeelement(ans, 'wp:anchor', **{'dist'+edge:'0' for edge in 'LRTB'})
-        parent.set('simplePos', '0'), parent.set('relativeHeight', '1'), parent.set('behindDoc',"0"), parent.set('locked', "0")
-        parent.set('layoutInCell', "1"), parent.set('allowOverlap', '1')
+        parent.set('simplePos', '0'), parent.set('relativeHeight', '1'), parent.set('behindDoc','0'), parent.set('locked', '0')
+        parent.set('layoutInCell', '1'), parent.set('allowOverlap', '1')
         makeelement(parent, 'wp:simplePos', x='0', y='0')
         makeelement(makeelement(parent, 'wp:positionH', relativeFrom='page'), 'wp:align').text = 'center'
         makeelement(makeelement(parent, 'wp:positionV', relativeFrom='page'), 'wp:align').text = 'center'
@@ -245,7 +246,7 @@ class ImagesManager:
     def write_cover_block(self, body, cover_image):
         makeelement, namespaces = self.document_relationships.namespace.makeelement, self.document_relationships.namespace.namespaces
         pbb = body[0].xpath('//*[local-name()="pageBreakBefore"]')[0]
-        pbb.set('{%s}val' % namespaces['w'], 'on')
+        pbb.set('{{{}}}val'.format(namespaces['w']), 'on')
         p = makeelement(body, 'w:p', append=False)
         body.insert(0, p)
         r = makeelement(p, 'w:r')

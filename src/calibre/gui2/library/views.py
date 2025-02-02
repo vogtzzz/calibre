@@ -9,30 +9,67 @@ import itertools
 import operator
 from collections import OrderedDict
 from functools import partial
+
 from qt.core import (
-    QAbstractItemView, QDialog, QDialogButtonBox, QDrag, QEvent, QFont, QFontMetrics,
-    QGridLayout, QHeaderView, QIcon, QItemSelection, QItemSelectionModel, QLabel, QMenu,
-    QMimeData, QModelIndex, QPoint, QPushButton, QSize, QSpinBox, QStyle,
-    QStyleOptionHeader, Qt, QTableView, QUrl, pyqtSignal,
+    QAbstractItemDelegate,
+    QAbstractItemView,
+    QDialog,
+    QDialogButtonBox,
+    QDrag,
+    QEvent,
+    QFont,
+    QFontMetrics,
+    QGridLayout,
+    QHeaderView,
+    QIcon,
+    QItemSelection,
+    QItemSelectionModel,
+    QLabel,
+    QMenu,
+    QMimeData,
+    QModelIndex,
+    QPoint,
+    QPushButton,
+    QSize,
+    QSpinBox,
+    QStyle,
+    QStyleOptionHeader,
+    Qt,
+    QTableView,
+    QTimer,
+    QUrl,
+    pyqtSignal,
 )
 
 from calibre import force_unicode
 from calibre.constants import filesystem_encoding, islinux
-from calibre.gui2 import FunctionDispatcher, error_dialog, gprefs
+from calibre.gui2 import BOOK_DETAILS_DISPLAY_DEBOUNCE_DELAY, FunctionDispatcher, error_dialog, gprefs, show_restart_warning
 from calibre.gui2.dialogs.enum_values_edit import EnumValuesEdit
 from calibre.gui2.gestures import GestureManager
 from calibre.gui2.library import DEFAULT_SORT
-from calibre.gui2.library.alternate_views import (
-    AlternateViews, handle_enter_press, setup_dnd_interface,
-)
+from calibre.gui2.library.alternate_views import AlternateViews, handle_enter_press, setup_dnd_interface
 from calibre.gui2.library.delegates import (
-    CcBoolDelegate, CcCommentsDelegate, CcDateDelegate, CcEnumDelegate,
-    CcLongTextDelegate, CcMarkdownDelegate, CcNumberDelegate, CcSeriesDelegate, CcTemplateDelegate,
-    CcTextDelegate, CompleteDelegate, DateDelegate, LanguagesDelegate, PubDateDelegate,
-    RatingDelegate, SeriesDelegate, TextDelegate,
+    CcBoolDelegate,
+    CcCommentsDelegate,
+    CcDateDelegate,
+    CcEnumDelegate,
+    CcLongTextDelegate,
+    CcMarkdownDelegate,
+    CcNumberDelegate,
+    CcSeriesDelegate,
+    CcTemplateDelegate,
+    CcTextDelegate,
+    CompleteDelegate,
+    DateDelegate,
+    LanguagesDelegate,
+    PubDateDelegate,
+    RatingDelegate,
+    SeriesDelegate,
+    TextDelegate,
 )
 from calibre.gui2.library.models import BooksModel, DeviceBooksModel
 from calibre.gui2.pin_columns import PinTableView
+from calibre.gui2.preferences.create_custom_column import CreateNewCustomColumn
 from calibre.utils.config import prefs, tweaks
 from calibre.utils.icu import primary_sort_key
 from polyglot.builtins import iteritems
@@ -361,9 +398,10 @@ class BooksView(QTableView):  # {{{
             elif tval == 'open_viewer':
                 wv.setEditTriggers(QAbstractItemView.EditTrigger.SelectedClicked|wv.editTriggers())
                 wv.doubleClicked.connect(parent.iactions['View'].view_triggered)
-            elif tval == 'show_book_details':
+            elif tval in ('show_book_details', 'show_locked_book_details'):
                 wv.setEditTriggers(QAbstractItemView.EditTrigger.SelectedClicked|wv.editTriggers())
-                wv.doubleClicked.connect(parent.iactions['Show Book Details'].show_book_info)
+                wv.doubleClicked.connect(partial(parent.iactions['Show Book Details'].show_book_info,
+                                                 locked=tval == 'show_locked_book_details'))
             elif tval == 'edit_metadata':
                 # Must not enable single-click to edit, or the field will remain
                 # open in edit mode underneath the edit metadata dialog
@@ -416,7 +454,7 @@ class BooksView(QTableView):  # {{{
         self.preserve_state = partial(PreserveViewState, self)
         self.marked_changed_listener = FunctionDispatcher(self.marked_changed)
 
-        # {{{ Column Header setup
+        # Column Header setup {{{
         self.can_add_columns = True
         self.was_restored = False
         self.allow_save_state = True
@@ -531,6 +569,18 @@ class BooksView(QTableView):  # {{{
             view.apply_state(view.get_default_state())
         elif action == 'addcustcol':
             self.add_column_signal.emit()
+        elif action == 'editcustcol':
+            def show_restart_dialog():
+                from calibre.gui2.preferences.main import must_restart_message
+                if show_restart_warning(must_restart_message):
+                    self.gui.quit(restart=True)
+            col_manager = CreateNewCustomColumn(self.gui)
+            if col_manager.must_restart():
+                show_restart_dialog()
+            else:
+                res = col_manager.edit_existing_column(column)
+                if res[0] == CreateNewCustomColumn.Result.COLUMN_EDITED:
+                    show_restart_dialog()
         elif action.startswith('align_'):
             alignment = action.partition('_')[-1]
             self._model.change_alignment(column, alignment)
@@ -595,6 +645,13 @@ class BooksView(QTableView):  # {{{
                 ans.addAction(QIcon.ic('width.png'), _('Adjust width of column {0}').format(name),
                           partial(self.manually_adjust_column_size, view, col, name))
 
+        if not isinstance(view, DeviceBooksView):
+            col_manager = CreateNewCustomColumn(self.gui)
+            if self.can_add_columns and self.model().is_custom_column(col):
+                act = ans.addAction(QIcon.ic('edit_input.png'), _('Edit column definition for %s') % name,
+                                    partial(handler, action='editcustcol'))
+                if col_manager.must_restart():
+                    act.setEnabled(False)
         if self.is_library_view:
             if self._model.db.field_metadata[col]['is_category']:
                 act = ans.addAction(QIcon.ic('quickview.png'), _('Quickview column %s') % name,
@@ -628,8 +685,10 @@ class BooksView(QTableView):  # {{{
                 partial(handler, action='reset_ondevice_width'))
         ans.addAction(_('Restore default layout'), partial(handler, action='defaults'))
         if self.can_add_columns:
-            ans.addAction(
-                    QIcon.ic('column.png'), _('Add your own columns'), partial(handler, action='addcustcol'))
+            act = ans.addAction(QIcon.ic('column.png'), _('Add your own columns'),
+                                partial(handler, action='addcustcol'))
+            col_manager = CreateNewCustomColumn(self.gui)
+            act.setEnabled(not col_manager.must_restart())
         return ans
 
     def show_row_header_context_menu(self, pos):
@@ -692,7 +751,7 @@ class BooksView(QTableView):  # {{{
 
             ac = getattr(m, 'column_mouse_move_action', None)
             if ac is None:
-                ac = m.column_mouse_move_action = m.addAction(_("Allow moving columns with the mouse"),
+                ac = m.column_mouse_move_action = m.addAction(_('Allow moving columns with the mouse'),
                           partial(self.column_header_context_handler, action='lock', column=col, view=view))
                 ac.setCheckable(True)
             ac.setChecked(view.column_header.sectionsMovable())
@@ -1276,7 +1335,7 @@ class BooksView(QTableView):  # {{{
     def visible_columns(self):
         h = self.horizontalHeader()
         logical_indices = (x for x in range(h.count()) if not h.isSectionHidden(x))
-        rmap = {i:x for i, x in enumerate(self.column_map)}
+        rmap = dict(enumerate(self.column_map))
         return (rmap[h.visualIndex(x)] for x in logical_indices if h.visualIndex(x) > -1)
 
     def refresh_book_details(self, force=False):
@@ -1578,6 +1637,50 @@ class BooksView(QTableView):  # {{{
     def close(self):
         self._model.close()
 
+    def closeEditor(self, editor, hint):
+        # As of Qt 6.7.2, for some reason, Qt opens the next editor after
+        # closing this editor and then immediately closes it again. So
+        # workaround the bug by opening the editor again after an event loop
+        # tick.
+        orig = self.currentIndex()
+        move_by = None
+        if hint is QAbstractItemDelegate.EndEditHint.EditNextItem:
+            move_by = QAbstractItemView.CursorAction.MoveNext
+        elif hint is QAbstractItemDelegate.EndEditHint.EditPreviousItem:
+            move_by = QAbstractItemView.CursorAction.MovePrevious
+        if move_by is not None:
+            hint = QAbstractItemDelegate.EndEditHint.NoHint
+        ans = super().closeEditor(editor, hint)
+        if move_by is not None and self.currentIndex() == orig and self.state() is not QAbstractItemView.State.EditingState:
+            # Skip over columns that aren't editable or are implemented by a dialog
+            while True:
+                index = self.moveCursor(move_by, Qt.KeyboardModifier.NoModifier)
+                if not index.isValid():
+                    break
+                self.setCurrentIndex(index)
+                m = self._model
+                col = m.column_map[index.column()]
+                if m.is_custom_column(col):
+                    # Don't try to open editors implemented by dialogs such as
+                    # markdown, composites and comments
+                    if self.itemDelegateForIndex(index).is_editable_with_tab:
+                        break
+                elif m.flags(index) & Qt.ItemFlag.ItemIsEditable:
+                    # Standard editable column
+                    break
+            if index.isValid():
+                def edit():
+                    if index.isValid():
+                        self.setCurrentIndex(index)
+                        # Tell the delegate to ignore keyboard modifiers in case
+                        # Shift-Tab is being used to move the cell.
+                        d = self.itemDelegateForIndex(index)
+                        if d is not None:
+                            d.ignore_kb_mods_on_edit = True
+                        self.edit(index)
+                QTimer.singleShot(0, edit)
+        return ans
+
     def set_editable(self, editable, supports_backloading):
         self._model.set_editable(editable)
 
@@ -1614,7 +1717,20 @@ class BooksView(QTableView):  # {{{
             self._model.search_done.connect(self.alternate_views.restore_current_book_state)
 
     def connect_to_book_display(self, bd):
-        self._model.new_bookdisplay_data.connect(bd)
+        self.book_display_callback = bd
+        self.connect_to_book_display_timer = t = QTimer(self)
+        t.setSingleShot(True)
+        t.timeout.connect(self._debounce_book_display)
+        t.setInterval(BOOK_DETAILS_DISPLAY_DEBOUNCE_DELAY)
+        self._model.new_bookdisplay_data.connect(self._timed_connect_to_book_display)
+
+    def _timed_connect_to_book_display(self, data):
+        self._book_display_data = data
+        self.connect_to_book_display_timer.start()
+
+    def _debounce_book_display(self):
+        data, self._book_display_data = self._book_display_data, None
+        self.book_display_callback(data)
 
     def search_done(self, ok):
         self._search_done(self, ok)

@@ -9,10 +9,8 @@ import os
 import re
 import traceback
 from contextlib import closing, suppress
-from qt.core import (
-    QAbstractListModel, QDir, QIcon, QItemSelection, QItemSelectionModel, Qt, QWizard,
-    QWizardPage, pyqtSignal,
-)
+
+from qt.core import QAbstractListModel, QDir, QIcon, QItemSelection, QItemSelectionModel, Qt, QWizard, QWizardPage, pyqtSignal
 
 from calibre import __appname__
 from calibre.constants import filesystem_encoding, isportable, iswindows
@@ -625,8 +623,8 @@ class DevicePage(QWizardPage, DeviceUI):
     def __init__(self):
         QWizardPage.__init__(self)
         self.setupUi(self)
-        self.registerField("manufacturer", self.manufacturer_view)
-        self.registerField("device", self.device_view)
+        self.registerField('manufacturer', self.manufacturer_view)
+        self.registerField('device', self.device_view)
 
     def initializePage(self):
         self.label.setText(_('Choose your e-book device. If your device is'
@@ -716,9 +714,7 @@ class LibraryPage(QWizardPage, LibraryUI):
     def init_languages(self):
         self.language.blockSignals(True)
         self.language.clear()
-        from calibre.utils.localization import (
-            available_translations, get_lang, get_language, get_lc_messages_path,
-        )
+        from calibre.utils.localization import available_translations, get_lang, get_language, get_lc_messages_path
         lang = get_lang()
         lang = get_lc_messages_path(lang) if lang else lang
         if lang is None or lang not in available_translations():
@@ -755,9 +751,9 @@ class LibraryPage(QWizardPage, LibraryUI):
         try:
             lang = prefs['language'].lower()[:2]
             metadata_plugins = {
-                    'zh' : ('Douban Books',),
-                    'fr' : ('Nicebooks',),
-                    'ru' : ('OZON.ru',),
+                    'zh': ('Douban Books',),
+                    'fr': ('Nicebooks',),
+                    'ru': ('OZON.ru',),
             }.get(lang, [])
             from calibre.customize.ui import enable_plugin
             for name in metadata_plugins:
@@ -954,7 +950,7 @@ class Wizard(QWizard):
         QWizard.accept(self)
 
     def set_finish_text(self, *args):
-        bt = str("<em>" + self.buttonText(QWizard.WizardButton.FinishButton) + "</em>").replace('&', '')
+        bt = str('<em>' + self.buttonText(QWizard.WizardButton.FinishButton) + '</em>').replace('&', '')
         t = str(self.finish_page.finish_text.text())
         if '%s' in t:
             self.finish_page.finish_text.setText(t%bt)

@@ -2,19 +2,34 @@
 # License: GPL v3 Copyright: 2020, Kovid Goyal <kovid at kovidgoyal.net>
 
 import json
-import regex
 from collections import Counter, OrderedDict
 from html import escape
-from qt.core import (
-    QAbstractItemView, QCheckBox, QComboBox, QFont, QHBoxLayout, QIcon, QLabel, QMenu,
-    Qt, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget, pyqtSignal,
-)
 from threading import Thread
+
+import regex
+from qt.core import (
+    QAbstractItemView,
+    QCheckBox,
+    QComboBox,
+    QFont,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QMenu,
+    Qt,
+    QToolButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
+)
 
 from calibre.ebooks.conversion.search_replace import REGEX_FLAGS
 from calibre.gui2 import warning_dialog
 from calibre.gui2.gestures import GestureManager
 from calibre.gui2.progress_indicator import ProgressIndicator
+from calibre.gui2.viewer import get_boss
 from calibre.gui2.viewer.config import vprefs
 from calibre.gui2.viewer.web_view import get_data, get_manifest
 from calibre.gui2.viewer.widgets import ResultsDelegate, SearchBox
@@ -139,7 +154,7 @@ class Search:
             flags = self.regex_flags
             flags |= regex.DOTALL
             match_any_word = r'(?:\b(?:' + '|'.join(words) + r')\b)'
-            joiner = '.{1,%d}' % interval
+            joiner = '.{1,%d}' % interval  # noqa: UP031
             full_pat = regex.compile(joiner.join(match_any_word for x in words), flags=flags)
             word_pats = tuple(regex.compile(rf'\b{x}\b', flags) for x in words)
             self._nsd = word_pats, full_pat
@@ -168,9 +183,18 @@ class SearchFinished:
 class SearchResult:
 
     __slots__ = (
-        'search_query', 'before', 'text', 'after', 'q', 'spine_idx',
-        'index', 'file_name', 'is_hidden', 'offset', 'toc_nodes',
-        'result_num'
+        'after',
+        'before',
+        'file_name',
+        'index',
+        'is_hidden',
+        'offset',
+        'q',
+        'result_num',
+        'search_query',
+        'spine_idx',
+        'text',
+        'toc_nodes',
     )
 
     def __init__(self, search_query, before, text, after, q, name, spine_idx, index, offset, result_num):
@@ -209,21 +233,26 @@ class SearchResult:
 @lru_cache(maxsize=None)
 def searchable_text_for_name(name):
     ans = []
+    add_text = ans.append
     serialized_data = json.loads(get_data(name)[0])
     stack = []
+    a = stack.append
     removed_tails = []
+    no_visit = frozenset({'script', 'style', 'title', 'head'})
+    ignore_text = frozenset({'img', 'math', 'rt', 'rp', 'rtc'})
     for child in serialized_data['tree']['c']:
         if child.get('n') == 'body':
-            stack.append(child)
+            a((child, False, False))
             # the JS code does not add the tail of body tags to flat text
             removed_tails.append((child.pop('l', None), child))
-    ignore_text = {'script', 'style', 'title'}
     text_pos = 0
     anchor_offset_map = OrderedDict()
     while stack:
-        node = stack.pop()
+        node, text_ignored_in_parent, in_ruby = stack.pop()
         if isinstance(node, str):
-            ans.append(node)
+            if in_ruby:
+                node = node.strip()
+            add_text(node)
             text_pos += len(node)
             continue
         g = node.get
@@ -238,14 +267,24 @@ def searchable_text_for_name(name):
                     aid = x[1]
                     if aid not in anchor_offset_map:
                         anchor_offset_map[aid] = text_pos
-        if name and text and name not in ignore_text:
-            ans.append(text)
+        if name in no_visit:
+            continue
+        node_in_ruby = in_ruby
+        if not in_ruby and name == 'ruby':
+            in_ruby = True
+        ignore_text_in_node_and_children = text_ignored_in_parent or name in ignore_text
+
+        if text and not ignore_text_in_node_and_children:
+            if in_ruby:
+                text = text.strip()
+            add_text(text)
             text_pos += len(text)
-        if tail:
-            stack.append(tail)
+        if tail and not text_ignored_in_parent:
+            a((tail, ignore_text_in_node_and_children, node_in_ruby))
         if children:
-            stack.extend(reversed(children))
-    for (tail, body) in removed_tails:
+            for child in reversed(children):
+                a((child, ignore_text_in_node_and_children, in_ruby))
+    for tail, body in removed_tails:
         if tail is not None:
             body['l'] = tail
     return ''.join(ans), anchor_offset_map
@@ -380,7 +419,7 @@ def search_in_name(name, search_query, ctx_size=75):
                 return spans.append((s, s + l))
             primary_collator_without_punctuation().find_all(search_query.text, raw, a, search_query.mode == 'word')
 
-    for (start, end) in miter():
+    for start, end in miter():
         before = raw[max(0, start-ctx_size):start]
         after = raw[end:end+ctx_size]
         yield before, raw[start:end], after, start
@@ -392,7 +431,7 @@ class SearchInput(QWidget):  # {{{
     cleared = pyqtSignal()
     go_back = pyqtSignal()
 
-    def __init__(self, parent=None, panel_name='search'):
+    def __init__(self, parent=None, panel_name='search', show_return_button=True):
         QWidget.__init__(self, parent)
         self.ignore_search_type_changes = False
         self.l = l = QVBoxLayout(self)
@@ -462,6 +501,7 @@ class SearchInput(QWidget):  # {{{
         rb.setToolTip(_('Go back to where you were before searching'))
         rb.clicked.connect(self.go_back)
         h.addWidget(rb)
+        rb.setVisible(show_return_button)
 
     def history_saved(self, new_text, history):
         if new_text:
@@ -505,6 +545,9 @@ class SearchInput(QWidget):  # {{{
             )
 
     def emit_search(self, backwards=False):
+        boss = get_boss()
+        if boss.check_for_read_aloud(_('the location of this search result')):
+            return
         vprefs[f'viewer-{self.panel_name}-case-sensitive'] = self.case_sensitive.isChecked()
         vprefs[f'viewer-{self.panel_name}-mode'] = self.query_type.currentData()
         sq = self.search_query(backwards)
@@ -566,7 +609,6 @@ class Results(QTreeWidget):  # {{{
         m.addAction(QIcon.ic('minus.png'), _('Collapse all'), self.collapseAll)
         self.context_menu.popup(self.mapToGlobal(point))
         return True
-
 
     def viewportEvent(self, ev):
         if hasattr(self, 'gesture_manager'):
@@ -632,6 +674,9 @@ class Results(QTreeWidget):  # {{{
         self.count_changed.emit(n)
 
     def item_activated(self):
+        boss = get_boss()
+        if boss.check_for_read_aloud(_('the location of this search result')):
+            return
         i = self.currentItem()
         if i:
             sr = i.data(0, SEARCH_RESULT_ROLE)

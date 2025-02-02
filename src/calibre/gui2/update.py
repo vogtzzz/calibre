@@ -3,16 +3,12 @@ __copyright__ = '2008, Kovid Goyal <kovid at kovidgoyal.net>'
 
 import re
 import ssl
-from qt.core import (
-    QCheckBox, QDialog, QDialogButtonBox, QGridLayout, QIcon, QLabel, QObject, Qt, QUrl,
-    pyqtSignal,
-)
 from threading import Event, Thread
 
+from qt.core import QApplication, QCheckBox, QDialog, QDialogButtonBox, QGridLayout, QIcon, QLabel, QObject, Qt, QUrl, pyqtSignal
+
 from calibre import as_unicode, prints
-from calibre.constants import (
-    __appname__, __version__, ismacos, isportable, iswindows, numeric_version,
-)
+from calibre.constants import __appname__, __version__, ismacos, isportable, iswindows, numeric_version
 from calibre.gui2 import config, dynamic, icon_resource_manager, open_url
 from calibre.gui2.dialogs.plugin_updater import get_plugin_updates_available
 from calibre.utils.config import prefs
@@ -167,9 +163,7 @@ class UpdateNotification(QDialog):
         save_version_notified(calibre_version)
 
     def get_plugins(self):
-        from calibre.gui2.dialogs.plugin_updater import (
-            FILTER_UPDATE_AVAILABLE, PluginUpdaterDialog,
-        )
+        from calibre.gui2.dialogs.plugin_updater import FILTER_UPDATE_AVAILABLE, PluginUpdaterDialog
         d = PluginUpdaterDialog(self.parent(),
                 initial_filter=FILTER_UPDATE_AVAILABLE)
         d.exec()
@@ -212,7 +206,6 @@ class UpdateMixin:
         self.plugin_update_found(number_of_plugin_updates)
         version_url = as_hex_unicode(msgpack_dumps((calibre_version, number_of_plugin_updates)))
         calibre_version = '.'.join(map(str, calibre_version))
-
         if not has_calibre_update and not has_plugin_updates:
             self.status_bar.update_label.setVisible(False)
             return
@@ -220,12 +213,13 @@ class UpdateMixin:
             plt = ''
             if has_plugin_updates:
                 plt = ngettext(' and one plugin update', ' and {} plugin updates', number_of_plugin_updates).format(number_of_plugin_updates)
-            msg = ('<span style="color:green; font-weight: bold">%s: '
-                    '<a href="update:%s">%s%s</a></span>') % (
-                        _('Update found'), version_url, calibre_version, plt)
+            green = 'darkgreen' if QApplication.instance().is_dark_theme else 'green'
+            msg = ('<span style="color:{}; font-weight: bold">{}: '
+                    '<a href="update:{}">{}{}</a></span>').format(
+                            green, _('Update available'), version_url, calibre_version, plt)
         else:
             plt = ngettext('plugin update available', 'plugin updates available', number_of_plugin_updates)
-            msg = ('<a href="update:%s">%d %s</a>')%(version_url, number_of_plugin_updates, plt)
+            msg = f'<a href="update:{version_url}">{number_of_plugin_updates} {plt}</a>'
         self.status_bar.update_label.setText(msg)
         self.status_bar.update_label.setVisible(True)
 
@@ -237,14 +231,14 @@ class UpdateMixin:
                     self._update_notification__.show()
         elif has_plugin_updates:
             if force:
-                from calibre.gui2.dialogs.plugin_updater import (
-                    FILTER_UPDATE_AVAILABLE, PluginUpdaterDialog,
-                )
-                d = PluginUpdaterDialog(self,
-                        initial_filter=FILTER_UPDATE_AVAILABLE)
-                d.exec()
-                if d.do_restart:
-                    self.quit(restart=True)
+                self.show_plugin_update_dialog()
+
+    def show_plugin_update_dialog(self):
+        from calibre.gui2.dialogs.plugin_updater import FILTER_UPDATE_AVAILABLE, PluginUpdaterDialog
+        d = PluginUpdaterDialog(self, initial_filter=FILTER_UPDATE_AVAILABLE)
+        d.exec()
+        if d.do_restart:
+            self.quit(restart=True)
 
     def plugin_update_found(self, number_of_updates):
         # Change the plugin icon to indicate there are updates available

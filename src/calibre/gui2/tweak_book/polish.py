@@ -5,13 +5,33 @@ __license__ = 'GPL v3'
 __copyright__ = '2014, Kovid Goyal <kovid at kovidgoyal.net>'
 
 import re
-from qt.core import (
-    QAbstractItemView, QApplication, QCheckBox, QDialog, QDialogButtonBox, QHBoxLayout,
-    QIcon, QLabel, QListWidget, QListWidgetItem, QPalette, QPen, QPixmap, QProgressBar,
-    QSize, QSpinBox, QStyle, QStyledItemDelegate, Qt, QTextBrowser, QVBoxLayout,
-    QWidget, pyqtSignal,
-)
 from threading import Thread
+
+from qt.core import (
+    QAbstractItemView,
+    QApplication,
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPalette,
+    QPen,
+    QPixmap,
+    QProgressBar,
+    QSize,
+    QSpinBox,
+    QStyle,
+    QStyledItemDelegate,
+    Qt,
+    QTextBrowser,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
+)
 
 from calibre import fit_image, force_unicode, human_readable
 from calibre.ebooks.oeb.polish.main import CUSTOMIZATION
@@ -105,7 +125,7 @@ def get_customization(action, name, parent):
 def format_report(title, report):
     from calibre.ebooks.markdown import markdown
     report = [force_unicode(line) for line in report]
-    return markdown('# %s\n\n'%force_unicode(title) + '\n\n'.join(report), output_format='html4')
+    return markdown(f'# {force_unicode(title)}\n\n' + '\n\n'.join(report), output_format='html4')
 
 
 def show_report(changed, title, report, parent, show_current_diff):
@@ -143,8 +163,8 @@ def show_report(changed, title, report, parent, show_current_diff):
     if d.show_changes:
         show_current_diff(allow_revert=True)
 
-# CompressImages {{{
 
+# CompressImages {{{
 
 class ImageItemDelegate(QStyledItemDelegate):
 
@@ -184,7 +204,7 @@ class LossyCompression(QWidget):
         image_type = image_type.upper()
         self.enable_lossy = el = QCheckBox(_('Enable &lossy compression of {} images').format(image_type))
         el.setToolTip(_('This allows you to change the quality factor used for {} images.\nBy lowering'
-                        ' the quality you can greatly reduce file size, at the expense of the image looking blurred.'.format(image_type)))
+                        ' the quality you can greatly reduce file size, at the expense of the image looking blurred.').format(image_type))
         l.addWidget(el)
         self.h2 = h = QHBoxLayout()
         l.addLayout(h)
@@ -257,7 +277,6 @@ class CompressImages(Dialog):
         return self.webp.jq.value()
 
 
-
 class CompressImagesProgress(Dialog):
 
     gui_loop = pyqtSignal(object, object, object)
@@ -326,8 +345,9 @@ class CompressImagesProgress(Dialog):
 if __name__ == '__main__':
     from calibre.gui2 import Application
     app = Application([])
-    import sip
     import sys
+
+    import sip
 
     from calibre.ebooks.oeb.polish.container import get_container
     c = get_container(sys.argv[-1], tweak_mode=True)

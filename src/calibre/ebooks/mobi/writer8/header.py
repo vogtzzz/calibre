@@ -5,19 +5,26 @@ __license__   = 'GPL v3'
 __copyright__ = '2012, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import random, numbers
-from io import BytesIO
+import numbers
+import random
 from collections import OrderedDict
+from io import BytesIO
 from struct import pack
 
 from calibre.ebooks.mobi.utils import align_block
-from polyglot.builtins import iteritems, as_bytes
+from polyglot.builtins import as_bytes, iteritems
 
 NULL = 0xffffffff
+
+
 def zeroes(x):
     return (b'\x00' * x)
+
+
 def nulls(x):
     return (b'\xff' * x)
+
+
 def short(x):
     return pack(b'>H', x)
 
@@ -48,7 +55,7 @@ class Header(OrderedDict):
             else:
                 val = 0
             if name in self:
-                raise ValueError('Duplicate field in definition: %r'%name)
+                raise ValueError(f'Duplicate field in definition: {name!r}')
             self[name] = val
 
     @property
@@ -59,7 +66,7 @@ class Header(OrderedDict):
         positions = {}
         for name, val in iteritems(kwargs):
             if name not in self:
-                raise KeyError('Not a valid header field: %r'%name)
+                raise KeyError(f'Not a valid header field: {name!r}')
             self[name] = val
 
         buf = BytesIO()
@@ -68,7 +75,7 @@ class Header(OrderedDict):
             val = self.format_value(name, val)
             positions[name] = buf.tell()
             if val is None:
-                raise ValueError('Dynamic field %r not set'%name)
+                raise ValueError(f'Dynamic field {name!r} not set')
             if isinstance(val, numbers.Integral):
                 fmt = b'H' if name in self.SHORT_FIELDS else b'I'
                 val = pack(b'>'+fmt, val)

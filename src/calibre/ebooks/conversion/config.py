@@ -5,14 +5,15 @@ __license__   = 'GPL v3'
 __copyright__ = '2009, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import os, ast, json
+import ast
+import json
+import os
 
-from calibre.utils.config import config_dir, prefs, tweaks
-from calibre.utils.lock import ExclusiveFile
 from calibre import sanitize_file_name
 from calibre.customize.conversion import OptionRecommendation
 from calibre.customize.ui import available_output_formats
-
+from calibre.utils.config import config_dir, prefs, tweaks
+from calibre.utils.lock import ExclusiveFile
 
 config_dir = os.path.join(config_dir, 'conversion')
 
@@ -220,7 +221,7 @@ OPTIONS = {
 
         'fb2': ('no_inline_fb2_toc',),
 
-        'pdf': ('no_images', 'unwrap_factor'),
+        'pdf': ('no_images', 'unwrap_factor', 'pdf_engine', 'pdf_header_skip', 'pdf_footer_skip', 'pdf_header_regex', 'pdf_footer_regex'),
 
         'rtf': ('ignore_wmf',),
 
@@ -259,7 +260,7 @@ OPTIONS = {
         'structure_detection': (
             'chapter', 'chapter_mark', 'start_reading_at',
             'remove_first_image', 'remove_fake_margins', 'insert_metadata',
-            'page_breaks_before'),
+            'page_breaks_before', 'add_alt_text_to_img',),
 
         'toc': (
             'level1_toc', 'level2_toc', 'level3_toc',

@@ -8,8 +8,8 @@ __docformat__ = 'restructuredtext en'
 from contextlib import closing
 
 from calibre import browser
-from calibre.utils.xml_parse import safe_xml_fromstring
 from calibre.utils.opensearch.url import URL
+from calibre.utils.xml_parse import safe_xml_fromstring
 
 
 class Description:
@@ -17,7 +17,7 @@ class Description:
     A class for representing OpenSearch Description files.
     '''
 
-    def __init__(self, url=""):
+    def __init__(self, url=''):
         '''
         The constructor which may pass an optional url to load from.
 

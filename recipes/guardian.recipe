@@ -6,9 +6,10 @@ __docformat__ = 'restructuredtext en'
 '''
 www.guardian.co.uk
 '''
+from datetime import date
+
 from calibre import random_user_agent
 from calibre.web.feeds.news import BasicNewsRecipe
-from datetime import date
 
 
 def classes(classes):
@@ -21,10 +22,10 @@ class Guardian(BasicNewsRecipe):
 
     title = u'The Guardian and The Observer'
     is_observer = False
-    base_url = "https://www.theguardian.com/uk"
+    base_url = 'https://www.theguardian.com/uk'
     if date.today().weekday() == 6:
         is_observer = True
-        base_url = "https://www.theguardian.com/observer"
+        base_url = 'https://www.theguardian.com/observer'
 
     __author__ = 'Kovid Goyal'
     language = 'en_GB'
@@ -63,7 +64,7 @@ class Guardian(BasicNewsRecipe):
         classes('content__article-body js-bottom-marker article-body-commercial-selector'),
     ]
 
-    extra_css = """
+    extra_css = '''
             img {
                 max-width: 100% !important;
                 max-height: 100% !important;
@@ -77,7 +78,7 @@ class Guardian(BasicNewsRecipe):
                 font-size: 0.5em;
                 color: #6B6B6B;
             }
-        """
+        '''
 
     def get_browser(self, *a, **kw):
         # This site returns images in JPEG-XR format if the user agent is IE
@@ -113,3 +114,9 @@ class Guardian(BasicNewsRecipe):
         feeds = list(self.parse_section(self.base_url))
         feeds += list(self.parse_section('https://www.theguardian.com/uk/sport'))
         return feeds
+
+    def preprocess_html(self, soup):
+        for table in soup.findAll('table'):
+            if len(table.findAll('tr')) > 20:
+                table.decompose()
+        return soup

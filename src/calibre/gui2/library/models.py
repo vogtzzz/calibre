@@ -14,28 +14,22 @@ import time
 import traceback
 from collections import defaultdict, namedtuple
 from itertools import groupby
-from qt.core import (
-    QAbstractTableModel, QApplication, QColor, QFont, QFontMetrics, QIcon, QImage,
-    QModelIndex, QPainter, QPixmap, Qt, pyqtSignal,
-)
 
-from calibre import (
-    fit_image, human_readable, isbytestring, prepare_string_for_xml, strftime,
-)
+from qt.core import QAbstractTableModel, QApplication, QColor, QFont, QFontMetrics, QIcon, QImage, QModelIndex, QPainter, QPixmap, Qt, pyqtSignal
+
+from calibre import fit_image, human_readable, isbytestring, prepare_string_for_xml, strftime
 from calibre.constants import DEBUG, config_dir, dark_link_color, filesystem_encoding
 from calibre.db.search import CONTAINS_MATCH, EQUALS_MATCH, REGEXP_MATCH, _match
 from calibre.db.utils import force_to_bool
 from calibre.ebooks.metadata import authors_to_string, fmt_sidx, string_to_authors
 from calibre.ebooks.metadata.book.formatter import SafeFormat
-from calibre.gui2 import error_dialog, simple_excepthook
+from calibre.gui2 import error_dialog, is_dark_theme, simple_excepthook
 from calibre.gui2.library import DEFAULT_SORT
 from calibre.library.coloring import color_row_key
 from calibre.library.save_to_disk import find_plugboard
 from calibre.ptempfile import PersistentTemporaryFile
 from calibre.utils.config import device_prefs, prefs, tweaks
-from calibre.utils.date import (
-    UNDEFINED_DATE, dt_factory, is_date_undefined, qt_from_dt, qt_to_dt,
-)
+from calibre.utils.date import UNDEFINED_DATE, dt_factory, is_date_undefined, qt_from_dt, qt_to_dt
 from calibre.utils.icu import sort_key
 from calibre.utils.localization import calibre_langcode_to_name, ngettext
 from calibre.utils.resources import get_path as P
@@ -50,10 +44,13 @@ ALIGNMENT_MAP = {'left': Qt.AlignmentFlag.AlignLeft, 'right': Qt.AlignmentFlag.A
         Qt.AlignmentFlag.AlignHCenter}
 
 
-def render_pin(color='green', save_to=None):
+def render_pin(color=None, save_to=None):
+    app = QApplication.instance()
+    if color is None:
+        color = '#00b000' if app.is_dark_theme else 'green'
     svg = P('pin-template.svg', data=True).replace(b'fill:#f39509', ('fill:' + color).encode('utf-8'))
     pm = QPixmap()
-    dpr = QApplication.instance().devicePixelRatio()
+    dpr = app.devicePixelRatio()
     pm.setDevicePixelRatio(dpr)
     pm.loadFromData(svg, 'svg')
     if save_to:
@@ -62,7 +59,7 @@ def render_pin(color='green', save_to=None):
 
 
 def group_numbers(numbers):
-    for k, g in groupby(enumerate(sorted(numbers)), lambda i_x:i_x[0] - i_x[1]):
+    for k, g in groupby(enumerate(sorted(numbers)), lambda i_x: i_x[0] - i_x[1]):
         first = None
         for last in g:
             if first is None:
@@ -97,6 +94,20 @@ class ColumnColor:  # {{{
         except:
             pass
 # }}}
+
+
+def themed_icon_name(icon_dir, icon_name):
+    root, ext = os.path.splitext(icon_name)
+    # Remove any theme from the icon name
+    root = root.removesuffix('-for-dark-theme').removesuffix('-for-light-theme')
+    # Check if the correct themed icon exists.
+    theme_suffix = '-for-dark-theme' if is_dark_theme() else '-for-light-theme'
+    d = os.path.join(icon_dir, root + theme_suffix + ext)
+    if os.path.exists(d):
+        return d
+    # No themed icon exists. Try the original name
+    d = os.path.join(icon_dir, icon_name)
+    return d if os.path.exists(d) else None
 
 
 class ColumnIcon:  # {{{
@@ -138,9 +149,10 @@ class ColumnIcon:  # {{{
                 total_width = 0
                 rh = max(2, self.model.row_height - 4)
                 dim = int(self.dpr * rh)
+                icon_dir = os.path.join(config_dir, 'cc_icons')
                 for icon in icons:
-                    d = os.path.join(config_dir, 'cc_icons', icon)
-                    if (os.path.exists(d)):
+                    d = themed_icon_name(icon_dir, icon)
+                    if d is not None:
                         bm = QPixmap(d)
                         scaled, nw, nh = fit_image(bm.width(), bm.height(), bm.width(), dim)
                         bm = bm.scaled(int(nw), int(nh), aspectRatioMode=Qt.AspectRatioMode.IgnoreAspectRatio,
@@ -192,16 +204,16 @@ class BooksModel(QAbstractTableModel):  # {{{
         self.bi_font.setItalic(True)
         self.styled_columns = {}
         self.orig_headers = {
-                        'title'     : _("Title"),
-                        'ondevice'   : _("On Device"),
-                        'authors'   : _("Author(s)"),
-                        'size'      : _("Size (MB)"),
-                        'timestamp' : _("Date"),
+                        'title'     : _('Title'),
+                        'ondevice'  : _('On Device'),
+                        'authors'   : _('Author(s)'),
+                        'size'      : _('Size (MB)'),
+                        'timestamp' : _('Date'),
                         'pubdate'   : _('Published'),
                         'rating'    : _('Rating'),
-                        'publisher' : _("Publisher"),
-                        'tags'      : _("Tags"),
-                        'series'    : ngettext("Series", 'Series', 1),
+                        'publisher' : _('Publisher'),
+                        'tags'      : _('Tags'),
+                        'series'    : ngettext('Series', 'Series', 1),
                         'last_modified' : _('Modified'),
                         'languages' : _('Languages'),
                         'formats'   : _('Formats'),
@@ -392,7 +404,7 @@ class BooksModel(QAbstractTableModel):  # {{{
     def stop_metadata_backup(self):
         if getattr(self, 'metadata_backup', None) is not None:
             self.metadata_backup.stop()
-            # Would like to to a join here, but the thread might be waiting to
+            # Would like to a join here, but the thread might be waiting to
             # do something on the GUI thread. Deadlock.
 
     def refresh_ids(self, ids, current_row=-1):
@@ -876,7 +888,7 @@ class BooksModel(QAbstractTableModel):  # {{{
                     val = fffunc(field_obj, idfunc(idx), default_value=0) or 0
                     if val == 0:
                         return None
-                    ans = '%.1f' % (val * sz_mult)
+                    ans = f'{val*sz_mult:.1f}'
                     return ('<0.1' if ans == '0.0' else ans)
             elif field == 'languages':
                 def func(idx):
@@ -915,7 +927,7 @@ class BooksModel(QAbstractTableModel):  # {{{
                             return (text) if force_to_bool(text) is None else None
                     else:
                         def func(idx):
-                            return (fffunc(field_obj, idfunc(idx), default_value=''))
+                            return fffunc(field_obj, idfunc(idx), default_value='')
             elif dt == 'datetime':
                 def func(idx):
                     val = fffunc(field_obj, idfunc(idx), default_value=UNDEFINED_DATE)
@@ -1115,8 +1127,8 @@ class BooksModel(QAbstractTableModel):  # {{{
             cname = self.column_map[index.column()]
             return self.styled_columns.get(cname)
         # elif role == Qt.ItemDataRole.ToolTipRole and index.isValid():
-        #    if self.column_map[index.column()] in self.editable_cols:
-        #        return (_("Double click to <b>edit</b> me<br><br>"))
+        #     if self.column_map[index.column()] in self.editable_cols:
+        #         return (_("Double click to <b>edit</b> me<br><br>"))
         return None
 
     def headerData(self, section, orientation, role):
@@ -1354,7 +1366,7 @@ class OnDeviceSearch(SearchQueryParser):  # {{{
         self.model = model
 
     def universal_set(self):
-        return set(range(0, len(self.model.db)))
+        return set(range(len(self.model.db)))
 
     def get_matches(self, location, query):
         location = location.lower().strip()
@@ -1380,13 +1392,13 @@ class OnDeviceSearch(SearchQueryParser):  # {{{
         all_locs = set(self.USABLE_LOCATIONS) - {'all', 'tags', 'search'}
         locations = all_locs if location == 'all' else [location]
         q = {
-             'title' : lambda x : getattr(x, 'title').lower(),
-             'author': lambda x: ' & '.join(getattr(x, 'authors')).lower(),
-             'collections':lambda x: ','.join(getattr(x, 'device_collections')).lower(),
-             'format':lambda x: os.path.splitext(x.path)[1].lower(),
-             'inlibrary':lambda x : getattr(x, 'in_library'),
-             'tags':lambda x : getattr(x, 'tags', [])
-             }
+            'title': lambda x: getattr(x, 'title').lower(),
+            'author': lambda x: ' & '.join(getattr(x, 'authors')).lower(),
+            'collections':lambda x: ','.join(getattr(x, 'device_collections')).lower(),
+            'format':lambda x: os.path.splitext(x.path)[1].lower(),
+            'inlibrary':lambda x: getattr(x, 'in_library'),
+            'tags':lambda x: getattr(x, 'tags', [])
+        }
         for x in ('author', 'format'):
             q[x+'s'] = q[x]
         upf = prefs['use_primary_find_in_search']
@@ -1521,7 +1533,7 @@ class DeviceBooksModel(BooksModel):  # {{{
         self.count_changed()
 
     def paths_deleted(self, paths):
-        self.map = list(range(0, len(self.db)))
+        self.map = list(range(len(self.db)))
         self.resort(False)
         self.research(True)
         self.count_changed()
@@ -1615,8 +1627,8 @@ class DeviceBooksModel(BooksModel):  # {{{
 
         keygen = {
                 'title': ('title_sorter', lambda x: sort_key(x) if x else b''),
-                'authors' : author_key,
-                'size' : ('size', int),
+                'authors': author_key,
+                'size': ('size', int),
                 'timestamp': ('datetime', functools.partial(dt_factory, assume_utc=True)),
                 'collections': ('device_collections', lambda x:sorted(x,
                     key=sort_key)),
@@ -1657,7 +1669,7 @@ class DeviceBooksModel(BooksModel):  # {{{
     def set_database(self, db):
         self.custom_columns = {}
         self.db = db
-        self.map = list(range(0, len(db)))
+        self.map = list(range(len(db)))
         self.research(reset=False)
         self.resort()
         self.count_changed()
@@ -1828,7 +1840,7 @@ class DeviceBooksModel(BooksModel):  # {{{
                     cname == 'collections' and (
                         callable(getattr(self.db, 'supports_collections', None)) and self.db.supports_collections())
             ):
-                return (_("Double click to <b>edit</b> me<br><br>"))
+                return (_('Double click to <b>edit</b> me<br><br>'))
         elif role == Qt.ItemDataRole.DecorationRole and cname == 'inlibrary':
             if hasattr(self.db[self.map[row]], 'in_library_waiting'):
                 return (self.sync_icon)
@@ -1881,7 +1893,7 @@ class DeviceBooksModel(BooksModel):  # {{{
                 self.upload_collections.emit(self.db)
                 return True
 
-            if cname == 'title' :
+            if cname == 'title':
                 self.db[idx].title = val
             elif cname == 'authors':
                 self.db[idx].authors = string_to_authors(val)

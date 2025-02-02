@@ -3,17 +3,35 @@
 
 import time
 import traceback
+from collections.abc import Iterator
 from operator import attrgetter
+
 from qt.core import (
-    QAbstractItemView, QDialogButtonBox, QHBoxLayout, QIcon, QLabel, QListWidget,
-    QListWidgetItem, QMenu, QPainter, QPalette, QPixmap, QRectF, QSize, QSpinBox,
-    QStyle, QStyledItemDelegate, Qt, QTabWidget, QVBoxLayout, pyqtSignal,
+    QAbstractItemView,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
+    QPainter,
+    QPalette,
+    QPixmap,
+    QRectF,
+    QSize,
+    QSpinBox,
+    QStyle,
+    QStyledItemDelegate,
+    Qt,
+    QTabWidget,
+    QVBoxLayout,
+    pyqtSignal,
 )
-from typing import Iterator, List
 
 from calibre import fit_image
 from calibre.db.constants import DEFAULT_TRASH_EXPIRY_TIME_SECONDS, TrashEntry
-from calibre.gui2 import error_dialog, choose_dir, choose_save_file
+from calibre.gui2 import choose_dir, choose_save_file, error_dialog
 from calibre.gui2.dialogs.confirm_delete import confirm
 from calibre.gui2.widgets import BusyCursor
 from calibre.gui2.widgets2 import Dialog
@@ -84,7 +102,7 @@ class TrashList(QListWidget):
 
     restore_item = pyqtSignal(object, object)
 
-    def __init__(self, entries: List[TrashEntry], parent: 'TrashView', is_books: bool):
+    def __init__(self, entries: list[TrashEntry], parent: 'TrashView', is_books: bool):
         super().__init__(parent)
         self.is_books = is_books
         self.db = parent.db
@@ -294,8 +312,6 @@ class TrashView(Dialog):
             self, _('Failed to process some {}').format(entry_type),
             _('Could not {0} some {1}. Click "Show details" for details.').format(operation, entry_type),
             det_msg='\n'.join(det_msg), show=True)
-
-
 
 
 if __name__ == '__main__':

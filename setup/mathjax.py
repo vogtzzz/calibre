@@ -5,9 +5,9 @@ __license__   = 'GPL v3'
 __copyright__ = '2012, Kovid Goyal <kovid at kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import os, json
+import json
+import os
 from hashlib import sha1
-
 
 from setup.revendor import ReVendor
 
@@ -18,7 +18,7 @@ class MathJax(ReVendor):
     NAME = 'mathjax'
     TAR_NAME = 'MathJax'
     VERSION = '3.1.4'
-    DOWNLOAD_URL = 'https://github.com/mathjax/MathJax/archive/%s.tar.gz' % VERSION
+    DOWNLOAD_URL = f'https://github.com/mathjax/MathJax/archive/{VERSION}.tar.gz'
 
     def add_file_pre(self, name, raw):
         self.h.update(raw)

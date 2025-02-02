@@ -3,35 +3,60 @@
 
 import copy
 import json
-import regex
 import time
 from collections import Counter, OrderedDict
 from functools import partial
+
+import regex
 from qt.core import (
-    QAbstractItemView, QAbstractListModel, QAction, QApplication, QCheckBox, QComboBox,
-    QDialog, QDialogButtonBox, QEvent, QFont, QFrame, QGridLayout, QHBoxLayout, QIcon,
-    QItemSelection, QItemSelectionModel, QKeySequence, QLabel, QLineEdit, QListView,
-    QMenu, QMimeData, QModelIndex, QPushButton, QScrollArea, QSize, QSizePolicy,
-    QStackedLayout, QStyledItemDelegate, Qt, QTimer, QToolBar, QToolButton, QVBoxLayout,
-    QWidget, pyqtSignal,
+    QAbstractItemView,
+    QAbstractListModel,
+    QAction,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QEvent,
+    QFont,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QIcon,
+    QItemSelection,
+    QItemSelectionModel,
+    QKeySequence,
+    QLabel,
+    QLineEdit,
+    QListView,
+    QMenu,
+    QMimeData,
+    QModelIndex,
+    QPushButton,
+    QScrollArea,
+    QSize,
+    QSizePolicy,
+    QStackedLayout,
+    QStyledItemDelegate,
+    Qt,
+    QTimer,
+    QToolBar,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
 )
 
 from calibre import prepare_string_for_xml
 from calibre.constants import iswindows
-from calibre.ebooks.conversion.search_replace import (
-    REGEX_FLAGS, compile_regular_expression,
-)
+from calibre.ebooks.conversion.search_replace import REGEX_FLAGS, compile_regular_expression
 from calibre.gui2 import choose_files, choose_save_file, error_dialog, info_dialog
 from calibre.gui2.dialogs.confirm_delete import confirm
 from calibre.gui2.dialogs.message_box import MessageBox
 from calibre.gui2.tweak_book import current_container, editors, tprefs
-from calibre.gui2.tweak_book.editor.snippets import (
-    KEY, MODIFIER, SnippetTextEdit, find_matching_snip, parse_template, string_length,
-)
-from calibre.gui2.tweak_book.function_replace import (
-    Function, FunctionBox, FunctionEditor, functions as replace_functions,
-    remove_function,
-)
+from calibre.gui2.tweak_book.editor.snippets import KEY, MODIFIER, SnippetTextEdit, find_matching_snip, parse_template, string_length
+from calibre.gui2.tweak_book.function_replace import Function, FunctionBox, FunctionEditor, remove_function
+from calibre.gui2.tweak_book.function_replace import functions as replace_functions
 from calibre.gui2.widgets import BusyCursor
 from calibre.gui2.widgets2 import FlowLayout, HistoryComboBox
 from calibre.startup import connect_lambda
@@ -42,7 +67,6 @@ from polyglot.builtins import error_message, iteritems
 
 
 class AnimatablePushButton(QPushButton):
-
     'A push button that can be animated without actually emitting a clicked signal'
 
     def __init__(self, *args, **kwargs):
@@ -105,7 +129,7 @@ class HistoryBox(HistoryComboBox):
             if not self.ignore_snip_expansion:
                 self.ignore_snip_expansion = True
                 expand_template(self.lineEdit())
-                QTimer.singleShot(100, lambda : setattr(self, 'ignore_snip_expansion', False))
+                QTimer.singleShot(100, lambda: setattr(self, 'ignore_snip_expansion', False))
             ev.accept()
             return True
         return HistoryComboBox.event(self, ev)
@@ -303,6 +327,8 @@ class SearchWidget(QWidget):
         self.rfb = rfb = PushButton(_('Replace a&nd Find'), 'replace-find', self)
         self.rb = rb = PushButton(_('Re&place'), 'replace', self)
         self.rab = rab = PushButton(_('Replace &all'), 'replace-all', self)
+        rab.setToolTip(_('Replace all occurrences, ignoring wrap and current position.'))
+
         l.addWidget(fb, 0, 2)
         l.addWidget(rfb, 0, 3)
         l.addWidget(rb, 1, 2)
@@ -949,7 +975,7 @@ class SavedSearches(QWidget):
         self.move_up_action = a = QAction(self)
         a.setShortcut(QKeySequence('Alt+Up'))
         b.setIcon(QIcon.ic('arrow-up.png'))
-        b.setToolTip(_('Move selected entries up') + ' [%s]' % a.shortcut().toString(QKeySequence.SequenceFormat.NativeText))
+        b.setToolTip(_('Move selected entries up') + f' [{a.shortcut().toString(QKeySequence.SequenceFormat.NativeText)}]')
         connect_lambda(a.triggered, self, lambda self: self.move_entry(-1))
         self.searches.addAction(a)
         connect_lambda(b.clicked, self, lambda self: self.move_entry(-1))
@@ -958,7 +984,7 @@ class SavedSearches(QWidget):
         self.move_down_action = a = QAction(self)
         a.setShortcut(QKeySequence('Alt+Down'))
         b.setIcon(QIcon.ic('arrow-down.png'))
-        b.setToolTip(_('Move selected entries down') + ' [%s]' % a.shortcut().toString(QKeySequence.SequenceFormat.NativeText))
+        b.setToolTip(_('Move selected entries down') + f' [{a.shortcut().toString(QKeySequence.SequenceFormat.NativeText)}]')
         connect_lambda(a.triggered, self, lambda self: self.move_entry(1))
         self.searches.addAction(a)
         connect_lambda(b.clicked, self, lambda self: self.move_entry(1))
@@ -1008,9 +1034,9 @@ class SavedSearches(QWidget):
         self.eb2 = b = pb(_('E&xport'), _('Export saved searches'))
         v.addWidget(b)
         self.em = m = QMenu(_('Export'))
-        m.addAction(_('Export all'), lambda : QTimer.singleShot(0, partial(self.export_searches, all=True)))
-        m.addAction(_('Export selected'), lambda : QTimer.singleShot(0, partial(self.export_searches, all=False)))
-        m.addAction(_('Copy to search panel'), lambda : QTimer.singleShot(0, self.copy_to_search_panel))
+        m.addAction(_('Export all'), lambda: QTimer.singleShot(0, partial(self.export_searches, all=True)))
+        m.addAction(_('Export selected'), lambda: QTimer.singleShot(0, partial(self.export_searches, all=False)))
+        m.addAction(_('Copy to search panel'), lambda: QTimer.singleShot(0, self.copy_to_search_panel))
         b.setMenu(m)
 
         self.searches.setFocus(Qt.FocusReason.OtherFocusReason)
@@ -1398,7 +1424,7 @@ def run_search(
     if isinstance(searches, dict):
         searches = [searches]
 
-    editor, where, files, do_all, marked = initialize_search_request(searches[0], action, current_editor, current_editor_name, searchable_names)
+    editor, where, files, do_all_, marked = initialize_search_request(searches[0], action, current_editor, current_editor_name, searchable_names)
     wrap = searches[0]['wrap']
 
     errfind = searches[0]['find']
@@ -1555,32 +1581,41 @@ def run_search(
         count_message(replace, count, show_diff=replace, count_map=count_map)
         return count
 
-    with BusyCursor():
-        if action == 'find':
-            return do_find()
-        if action == 'replace':
-            return do_replace()
-        if action == 'replace-find' and do_replace():
-            return do_find()
-        if action == 'replace-all':
-            if marked:
-                show_result_dialog = True
-                for p, repl in searches:
-                    if getattr(getattr(repl, 'func', None), 'suppress_result_dialog', False):
-                        show_result_dialog = False
-                        break
-                return count_message(True, sum(editor.all_in_marked(p, repl) for p, repl in searches), show_dialog=show_result_dialog)
-            add_savepoint(_('Before: Replace all'))
-            count = do_all()
-            if count == 0:
-                rewind_savepoint()
-            else:
-                set_modified()
-            return
-        if action == 'count':
-            if marked:
-                return count_message(False, sum(editor.all_in_marked(p) for p, __ in searches))
-            return do_all(replace=False)
+    post_search_action = None
+    try:
+        with BusyCursor():
+            if action == 'find':
+                return do_find()
+            if action == 'replace':
+                return do_replace()
+            if action == 'replace-find' and do_replace():
+                return do_find()
+            if action == 'replace-all':
+                if marked:
+                    show_result_dialog = True
+                    for p, repl in searches:
+                        if getattr(getattr(repl, 'func', None), 'suppress_result_dialog', False):
+                            show_result_dialog = False
+                            break
+                    res_count = sum(editor.all_in_marked(p, repl) for p, repl in searches)
+                    post_search_action = partial(count_message, True, res_count, show_dialog=show_result_dialog)
+                    return
+                add_savepoint(_('Before: Replace all'))
+                count = do_all()
+                if count == 0:
+                    rewind_savepoint()
+                else:
+                    set_modified()
+                return
+            if action == 'count':
+                if marked:
+                    res_count = sum(editor.all_in_marked(p) for p, __ in searches)
+                    post_search_action = partial(count_message, False, res_count)
+                    return
+                return do_all(replace=False)
+    finally:
+        if post_search_action is not None:
+            post_search_action()
 
 
 if __name__ == '__main__':

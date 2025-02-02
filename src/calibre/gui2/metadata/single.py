@@ -8,24 +8,61 @@ __docformat__ = 'restructuredtext en'
 import os
 from datetime import datetime
 from functools import partial
+
 from qt.core import (
-    QDialog, QDialogButtonBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QIcon,
-    QInputDialog, QKeySequence, QMenu, QPushButton, QScrollArea, QShortcut, QSize,
-    QSizePolicy, QSpacerItem, QSplitter, Qt, QTabWidget, QToolButton, QVBoxLayout,
-    QWidget, pyqtSignal,
+    QAction,
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QIcon,
+    QInputDialog,
+    QKeySequence,
+    QMenu,
+    QPushButton,
+    QScrollArea,
+    QShortcut,
+    QSize,
+    QSizePolicy,
+    QSpacerItem,
+    QSplitter,
+    Qt,
+    QTabWidget,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
 )
 
 from calibre.constants import ismacos
+from calibre.db.constants import DATA_FILE_PATTERN
 from calibre.ebooks.metadata import authors_to_string, string_to_authors
 from calibre.ebooks.metadata.book.base import Metadata
 from calibre.gui2 import error_dialog, gprefs, pixmap_to_data
-from calibre.gui2.custom_column_widgets import Comments, populate_metadata_page
+from calibre.gui2.custom_column_widgets import Comments, get_custom_columns_to_display_in_editor, populate_metadata_page
 from calibre.gui2.dialogs.confirm_delete import confirm
 from calibre.gui2.metadata.basic_widgets import (
-    AuthorsEdit, AuthorSortEdit, BuddyLabel, CommentsEdit, Cover, DateEdit,
-    FormatsManager, IdentifiersEdit, LanguagesEdit, PubdateEdit, PublisherEdit,
-    RatingEdit, RightClickButton, SeriesEdit, SeriesIndexEdit, TagsEdit, TitleEdit,
-    TitleSortEdit
+    AuthorsEdit,
+    AuthorSortEdit,
+    BuddyLabel,
+    CommentsEdit,
+    Cover,
+    DateEdit,
+    FormatsManager,
+    IdentifiersEdit,
+    LanguagesEdit,
+    PubdateEdit,
+    PublisherEdit,
+    RatingEdit,
+    RightClickButton,
+    SeriesEdit,
+    SeriesIndexEdit,
+    TagsEdit,
+    TitleEdit,
+    TitleSortEdit,
 )
 from calibre.gui2.metadata.single_download import FullFetch
 from calibre.gui2.widgets2 import CenteredToolButton
@@ -87,11 +124,17 @@ class MetadataSingleDialogBase(QDialog):
         self.button_box.rejected.connect(self.reject)
         self.next_button = QPushButton(QIcon.ic('forward.png'), _('Next'),
                 self)
-        self.next_button.setShortcut(QKeySequence('Alt+Right'))
+        self.next_action = ac = QAction(self)
+        ac.triggered.connect(self.next_if_possible)
+        self.addAction(ac)
+        ac.setShortcut(QKeySequence('Alt+Right'))
         self.next_button.clicked.connect(self.next_clicked)
-        self.prev_button = QPushButton(QIcon.ic('back.png'), _('Previous'),
-                self)
-        self.prev_button.setShortcut(QKeySequence('Alt+Left'))
+        self.prev_button = QPushButton(QIcon.ic('back.png'), _('Previous'), self)
+        self.prev_button.clicked.connect(self.prev_clicked)
+        self.prev_action = ac = QAction(self)
+        ac.triggered.connect(self.prev_if_possible)
+        ac.setShortcut(QKeySequence('Alt+Left'))
+        self.addAction(ac)
         from calibre.gui2.actions.edit_metadata import DATA_FILES_ICON_NAME
         self.data_files_button = QPushButton(QIcon.ic(DATA_FILES_ICON_NAME), _('Data files'), self)
         self.data_files_button.setShortcut(QKeySequence('Alt+Space'))
@@ -101,7 +144,6 @@ class MetadataSingleDialogBase(QDialog):
 
         self.button_box.addButton(self.prev_button, QDialogButtonBox.ButtonRole.ActionRole)
         self.button_box.addButton(self.next_button, QDialogButtonBox.ButtonRole.ActionRole)
-        self.prev_button.clicked.connect(self.prev_clicked)
         bb.setStandardButtons(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel)
         bb.button(QDialogButtonBox.StandardButton.Ok).setDefault(True)
 
@@ -121,7 +163,7 @@ class MetadataSingleDialogBase(QDialog):
 
         self.create_basic_metadata_widgets()
 
-        if len(self.db.custom_column_label_map):
+        if len(get_custom_columns_to_display_in_editor(self.db)):
             self.create_custom_metadata_widgets()
         self.comments_edit_state_at_apply = {self.comments:None}
 
@@ -190,19 +232,19 @@ class MetadataSingleDialogBase(QDialog):
         self.swap_title_author_button = QToolButton(self)
         self.swap_title_author_button.setIcon(QIcon.ic('swap.png'))
         self.swap_title_author_button.setToolTip(_(
-            'Swap the author and title') + ' [%s]' % self.swap_title_author_shortcut.key().toString(QKeySequence.SequenceFormat.NativeText))
+            'Swap the author and title') + f' [{self.swap_title_author_shortcut.key().toString(QKeySequence.SequenceFormat.NativeText)}]')
         self.swap_title_author_button.clicked.connect(self.swap_title_author)
         self.swap_title_author_shortcut.activated.connect(self.swap_title_author_button.click)
 
         self.manage_authors_button = QToolButton(self)
         self.manage_authors_button.setIcon(QIcon.ic('user_profile.png'))
         self.manage_authors_button.setToolTip('<p>' + _(
-            'Open the Authors Category editor. Use to rename authors and correct '
-            'individual author\'s sort values') + '</p>')
+            'Open the Manage Authors editor. Use to rename authors and correct '
+            "individual author's sort values") + '</p>')
         self.manage_authors_button.clicked.connect(self.authors.manage_authors)
 
         self.series_editor_button = QToolButton(self)
-        self.series_editor_button.setToolTip(_('Open the Series Category editor'))
+        self.series_editor_button.setToolTip(_('Open the Manage Series editor'))
         self.series_editor_button.setIcon(QIcon.ic('chapters.png'))
         self.series_editor_button.clicked.connect(self.series_editor)
         self.series = SeriesEdit(self)
@@ -239,7 +281,7 @@ class MetadataSingleDialogBase(QDialog):
 
         self.tags = TagsEdit(self)
         self.tags_editor_button = QToolButton(self)
-        self.tags_editor_button.setToolTip(_('Open the Tag editor. If Ctrl or Shift is pressed, open the Tags Category editor'))
+        self.tags_editor_button.setToolTip(_('Open the Tag editor. If Ctrl or Shift is pressed, open the Manage Tags editor'))
         self.tags_editor_button.setIcon(QIcon.ic('chapters.png'))
         self.tags_editor_button.clicked.connect(self.tags_editor)
         self.tags.tag_editor_requested.connect(self.tags_editor)
@@ -267,7 +309,7 @@ class MetadataSingleDialogBase(QDialog):
         self.update_paste_identifiers_menu()
 
         self.publisher_editor_button = QToolButton(self)
-        self.publisher_editor_button.setToolTip(_('Open the Publishers Category editor'))
+        self.publisher_editor_button.setToolTip(_('Open the Manage Publishers editor'))
         self.publisher_editor_button.setIcon(QIcon.ic('chapters.png'))
         self.publisher_editor_button.clicked.connect(self.publisher_editor)
         self.publisher = PublisherEdit(self)
@@ -358,6 +400,10 @@ class MetadataSingleDialogBase(QDialog):
         else:
             self.view_format.emit(self.book_id, fmt)
 
+    def do_open_book_folder(self):
+        from calibre.gui2.ui import get_gui
+        get_gui().iactions['View'].view_folder_for_id(self.book_id)
+
     def do_edit_format(self, path, fmt):
         if self.was_data_edited:
             from calibre.gui2.tweak_book import tprefs
@@ -394,6 +440,7 @@ class MetadataSingleDialogBase(QDialog):
         from calibre.gui2.dialogs.data_files_manager import DataFilesManager
         d = DataFilesManager(self.db, self.book_id, self)
         d.exec()
+        self.update_data_files_button()
 
     def __call__(self, id_):
         self.book_id = id_
@@ -406,16 +453,21 @@ class MetadataSingleDialogBase(QDialog):
         if callable(self.set_current_callback):
             self.set_current_callback(id_)
         self.was_data_edited = False
+        self.update_data_files_button()
         # Commented out as it doesn't play nice with Next, Prev buttons
         # self.fetch_metadata_button.setFocus(Qt.FocusReason.OtherFocusReason)
 
     # Miscellaneous interaction methods {{{
+    def update_data_files_button(self):
+        num_files = len(self.db.new_api.list_extra_files(self.book_id, pattern=DATA_FILE_PATTERN))
+        self.data_files_button.setText(_('{} Data &files').format(num_files))
+
     def update_window_title(self, *args):
         title = self.title.current_val
         if len(title) > 50:
-            title = title[:50] + '\u2026'
+            title = title[:50] + '…'
         self.setWindowTitle(BASE_TITLE + ' - ' +
-                title + ' - ' +
+                title + ' -' +
                 _(' [%(num)d of %(tot)d]')%dict(num=self.current_row+1,
                 tot=len(self.row_list)))
 
@@ -564,6 +616,7 @@ class MetadataSingleDialogBase(QDialog):
             if d.cover_pixmap is not None:
                 self.metadata_before_fetch['cover'] = self.cover.current_val
                 self.cover.current_val = pixmap_to_data(d.cover_pixmap)
+        self.update_data_files_button()
 
     def undo_fetch_metadata(self):
         if self.metadata_before_fetch is None:
@@ -589,6 +642,7 @@ class MetadataSingleDialogBase(QDialog):
         if ret == QDialog.DialogCode.Accepted:
             if d.cover_pixmap is not None:
                 self.cover.current_val = pixmap_to_data(d.cover_pixmap)
+        self.update_data_files_button()
 
     # }}}
 
@@ -620,7 +674,7 @@ class MetadataSingleDialogBase(QDialog):
                 widget.commit(self.db, self.book_id)
                 self.books_to_refresh |= getattr(widget, 'books_to_refresh', set())
             except OSError as e:
-                e.locking_violation_msg = _('Could not change on-disk location of this book\'s files.')
+                e.locking_violation_msg = _("Could not change on-disk location of this book's files.")
                 raise
         for widget in getattr(self, 'custom_metadata_widgets', []):
             self.books_to_refresh |= widget.commit(self.book_id)
@@ -683,15 +737,33 @@ class MetadataSingleDialogBase(QDialog):
         self.break_cycles()
         return ret
 
+    def next_if_possible(self):
+        if self.next_button.isEnabled():
+            self.next_clicked()
+        else:
+            QApplication.beep()
+
+    def prev_if_possible(self):
+        if self.prev_button.isEnabled():
+            self.prev_clicked()
+        else:
+            QApplication.beep()
+
     def next_clicked(self):
+        fw = self.focusWidget()
         if not self.apply_changes():
             return
         self.do_one(delta=1, apply_changes=False)
+        if fw is not None:
+            fw.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def prev_clicked(self):
+        fw = self.focusWidget()
         if not self.apply_changes():
             return
         self.do_one(delta=-1, apply_changes=False)
+        if fw is not None:
+            fw.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def do_one(self, delta=0, apply_changes=True):
         if apply_changes:
@@ -705,11 +777,13 @@ class MetadataSingleDialogBase(QDialog):
             next_ = self.db.title(self.row_list[self.current_row+1])
 
         if next_ is not None:
-            tip = _('Save changes and edit the metadata of {} [Alt+Right]').format(next_)
+            tip = _('Save changes and edit the metadata of {0} [{1}]').format(
+                next_, self.next_action.shortcut().toString(QKeySequence.SequenceFormat.NativeText))
             self.next_button.setToolTip(tip)
         self.next_button.setEnabled(next_ is not None)
         if prev is not None:
-            tip = _('Save changes and edit the metadata of {} [Alt+Left]').format(prev)
+            tip = _('Save changes and edit the metadata of {0} [{1}]').format(
+                prev, self.prev_action.shortcut().toString(QKeySequence.SequenceFormat.NativeText))
             self.prev_button.setToolTip(tip)
         self.prev_button.setEnabled(prev is not None)
         self.button_box.button(QDialogButtonBox.StandardButton.Ok).setDefault(True)
@@ -767,7 +841,7 @@ class MetadataSingleDialog(MetadataSingleDialogBase):  # {{{
         self.tabs = []
         self.labels = []
         self.tabs.append(QWidget(self))
-        self.central_widget.addTab(ScrollArea(self.tabs[0], self), _("&Basic metadata"))
+        self.central_widget.addTab(ScrollArea(self.tabs[0], self), _('&Basic metadata'))
         self.tabs[0].l = l = QVBoxLayout()
         self.tabs[0].tl = tl = QGridLayout()
         self.tabs[0].setLayout(l)
@@ -932,12 +1006,12 @@ class MetadataSingleDialogAlt1(MetadataSingleDialogBase):  # {{{
 
         self.on_drag_enter.connect(self.handle_drag_enter)
         self.tabs.append(DragTrackingWidget(self, self.on_drag_enter))
-        self.central_widget.addTab(ScrollArea(self.tabs[0], self), _("&Metadata"))
+        self.central_widget.addTab(ScrollArea(self.tabs[0], self), _('&Metadata'))
         self.tabs[0].l = QGridLayout()
         self.tabs[0].setLayout(self.tabs[0].l)
 
         self.tabs.append(QWidget(self))
-        self.central_widget.addTab(ScrollArea(self.tabs[1], self), _("&Cover and formats"))
+        self.central_widget.addTab(ScrollArea(self.tabs[1], self), _('&Cover and formats'))
         self.tabs[1].l = QGridLayout()
         self.tabs[1].setLayout(self.tabs[1].l)
 
@@ -1009,7 +1083,7 @@ class MetadataSingleDialogAlt1(MetadataSingleDialogBase):  # {{{
         sto(self.tags_editor_button, self.publisher_editor_button)
         sto(self.publisher_editor_button, self.paste_isbn_button)
         tl.addItem(QSpacerItem(1, 1, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding),
-                   13, 1, 1 ,1)
+                   13, 1, 1, 1)
 
         w = getattr(self, 'custom_metadata_widgets_parent', None)
         if w is not None:
@@ -1092,7 +1166,7 @@ class MetadataSingleDialogAlt2(MetadataSingleDialogBase):  # {{{
 
         main_splitter = self.main_splitter = Splitter(Qt.Orientation.Horizontal, self)
         self.central_widget.tabBar().setVisible(False)
-        self.central_widget.addTab(ScrollArea(main_splitter, self), _("&Metadata"))
+        self.central_widget.addTab(ScrollArea(main_splitter, self), _('&Metadata'))
 
         # Left side (metadata & comments)
         # basic and custom split from comments
@@ -1168,7 +1242,7 @@ class MetadataSingleDialogAlt2(MetadataSingleDialogBase):  # {{{
         sto(self.tags_editor_button, self.publisher_editor_button)
         sto(self.publisher_editor_button, self.paste_isbn_button)
         tl.addItem(QSpacerItem(1, 1, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding),
-                   13, 1, 1 ,1)
+                   13, 1, 1, 1)
 
         # Custom metadata in col 1
         w = getattr(self, 'custom_metadata_widgets_parent', None)
@@ -1273,11 +1347,15 @@ def edit_metadata(db, row_list, current_row, parent=None, view_slot=None, edit_s
     if cls not in editors:
         cls = 'default'
     d = editors[cls](db, parent, editing_multiple=editing_multiple)
+    if hasattr(parent, 'extra_files_watcher'):
+        conn = parent.extra_files_watcher.books_changed.connect(d.update_data_files_button)
     try:
         d.start(row_list, current_row, view_slot=view_slot, edit_slot=edit_slot,
                 set_current_callback=set_current_callback)
         return d.changed, d.rows_to_refresh
     finally:
+        if hasattr(parent, 'extra_files_watcher'):
+            parent.extra_files_watcher.disconnect(conn)
         # possible workaround for bug reports of occasional ghost edit metadata dialog on windows
         d.deleteLater()
 
