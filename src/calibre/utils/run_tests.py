@@ -2,9 +2,13 @@
 # License: GPLv3 Copyright: 2016, Kovid Goyal <kovid at kovidgoyal.net>
 
 
-import unittest, functools, importlib, importlib.resources, os
-from calibre.utils.monotonic import monotonic
+import functools
+import importlib
+import importlib.resources
+import os
+import unittest
 
+from calibre.utils.monotonic import monotonic
 
 is_ci = os.environ.get('CI', '').lower() == 'true'
 
@@ -44,7 +48,7 @@ class TestResult(unittest.TextTestResult):
         elapsed -= self.start_time.get(test, elapsed)
         self.times[test] = elapsed
         self.stream.writeln = orig
-        self.stream.writeln(' [%.1f s]' % elapsed)
+        self.stream.writeln(f' [{elapsed:.1f} s]')
 
     def stopTestRun(self):
         super().stopTestRun()
@@ -52,7 +56,7 @@ class TestResult(unittest.TextTestResult):
             tests = sorted(self.times, key=self.times.get, reverse=True)
             slowest = [f'{t.id()} [{self.times[t]:.1f} s]' for t in tests[:3]]
             if len(slowest) > 1:
-                self.stream.writeln('\nSlowest tests: %s' % ' '.join(slowest))
+                self.stream.writeln('\nSlowest tests: {}'.format(' '.join(slowest)))
 
 
 def find_tests_in_package(package, excludes=('main.py',)):
@@ -61,7 +65,7 @@ def find_tests_in_package(package, excludes=('main.py',)):
     excludes = set(excludes) | {x + 'c' for x in excludes}
     seen = set()
     for x in items:
-        if (x.endswith('.py') or x.endswith('.pyc')) and x not in excludes:
+        if (x.endswith(('.py', '.pyc'))) and x not in excludes:
             q = x.rpartition('.')[0]
             if q in seen:
                 continue
@@ -80,14 +84,14 @@ def itertests(suite):
                 stack.append(test)
                 continue
             if test.__class__.__name__ == 'ModuleImportFailure':
-                raise Exception('Failed to import a test module: %s' % test)
+                raise Exception(f'Failed to import a test module: {test}')
             yield test
 
 
 def init_env():
-    from calibre.utils.config_base import reset_tweaks_to_default
     from calibre.ebooks.metadata.book.base import reset_field_metadata
     from calibre.ebooks.oeb.polish.utils import setup_css_parser_serialization
+    from calibre.utils.config_base import reset_tweaks_to_default
     reset_tweaks_to_default()
     reset_field_metadata()
     setup_css_parser_serialization()
@@ -142,7 +146,7 @@ def run_tests(find_tests, verbosity=4):
         else:
             tests = filter_tests_by_module(tests, args.name)
         if not tests._tests:
-            raise SystemExit('No test named %s found' % args.name)
+            raise SystemExit(f'No test named {args.name} found')
     run_cli(tests, verbosity, buffer=not args.name)
 
 
@@ -172,7 +176,7 @@ class TestImports(unittest.TestCase):
         return count
 
     def test_import_of_all_python_modules(self):
-        from calibre.constants import iswindows, ismacos, islinux, isbsd
+        from calibre.constants import isbsd, islinux, ismacos, iswindows
         exclude_packages = {'calibre.devices.mtp.unix.upstream'}
         exclude_modules = set()
         if not iswindows:
@@ -182,14 +186,16 @@ class TestImports(unittest.TestCase):
             exclude_modules.add('calibre.utils.open_with.osx')
         if not islinux:
             exclude_modules |= {
-                    'calibre.linux',
-                    'calibre.utils.linux_trash', 'calibre.utils.open_with.linux',
-                    'calibre.gui2.linux_file_dialogs',
+                'calibre.linux', 'calibre.gui2.tts.speechd',
+                'calibre.utils.linux_trash', 'calibre.utils.open_with.linux',
+                'calibre.gui2.linux_file_dialogs',
             }
+        if 'SKIP_SPEECH_TESTS' in os.environ:
+            exclude_packages.add('calibre.gui2.tts')
         if not isbsd:
             exclude_modules.add('calibre.devices.usbms.hal')
         d = os.path.dirname
-        SRC = d(d(d((os.path.abspath(__file__)))))
+        SRC = d(d(d(os.path.abspath(__file__))))
         self.assertGreater(self.base_check(os.path.join(SRC, 'odf'), exclude_packages, exclude_modules), 10)
         base = os.path.join(SRC, 'calibre')
         self.assertGreater(self.base_check(base, exclude_packages, exclude_modules), 1000)
@@ -210,7 +216,7 @@ def find_tests(which_tests=None, exclude_tests=None):
 
     if ok('build'):
         from calibre.test_build import find_tests
-        a(find_tests())
+        a(find_tests(only_build=True))
     if ok('srv'):
         from calibre.srv.tests.main import find_tests
         a(find_tests())
@@ -219,6 +225,8 @@ def find_tests(which_tests=None, exclude_tests=None):
         a(find_tests())
     if ok('polish'):
         from calibre.ebooks.oeb.polish.tests.main import find_tests
+        a(find_tests())
+        from calibre.ebooks.oeb.polish.tests.structure import find_tests
         a(find_tests())
     if ok('opf'):
         from calibre.ebooks.metadata.opf2 import suite
@@ -248,7 +256,7 @@ def find_tests(which_tests=None, exclude_tests=None):
         from calibre.utils.matcher import test
         a(test(return_tests=True))
     if ok('scraper'):
-        from calibre.scraper.simple import find_tests
+        from calibre.scraper.test_fetch_backend import find_tests
         a(find_tests())
     if ok('icu'):
         from calibre.utils.icu_test import find_tests
@@ -264,6 +272,10 @@ def find_tests(which_tests=None, exclude_tests=None):
         from calibre.utils.xml_parse import find_tests
         a(find_tests())
         from calibre.gui2.viewer.annotations import find_tests
+        a(find_tests())
+        from calibre.ebooks.html_entities import find_tests
+        a(find_tests())
+        from calibre.spell.dictionary import find_tests
         a(find_tests())
     if ok('misc'):
         from calibre.ebooks.html.input import find_tests
@@ -299,8 +311,6 @@ def find_tests(which_tests=None, exclude_tests=None):
         if iswindows:
             from calibre.utils.windows.wintest import find_tests
             a(find_tests())
-            from calibre.utils.windows.winsapi import find_tests
-            a(find_tests())
         a(unittest.defaultTestLoader.loadTestsFromTestCase(TestImports))
     if ok('dbcli'):
         from calibre.db.cli.tests import find_tests
@@ -314,7 +324,7 @@ def run_test(test_name, verbosity=4, buffer=False):
     # calibre-debug -t test_name
     which_tests = None
     if test_name.startswith('@'):
-        which_tests = test_name[1:],
+        which_tests = (test_name[1:],)
     tests = find_tests(which_tests)
     if test_name != 'all':
         if test_name.startswith('.'):
@@ -333,5 +343,10 @@ def run_cli(suite, verbosity=4, buffer=True):
     r.resultclass = unittest.TextTestResult if verbosity < 2 else TestResult
     init_env()
     result = r(verbosity=verbosity, buffer=buffer and not is_ci).run(suite)
-    if not result.wasSuccessful():
-        raise SystemExit(1)
+    rc = 0 if result.wasSuccessful() else 1
+    if is_ci:
+        # for some reason interpreter shutdown hangs probably some non-daemonic
+        # thread
+        os._exit(rc)
+    else:
+        raise SystemExit(rc)

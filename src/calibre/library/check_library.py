@@ -12,16 +12,16 @@ import traceback
 
 from calibre import isbytestring
 from calibre.constants import filesystem_encoding
-from calibre.db.constants import (
-    COVER_FILE_NAME, DATA_DIR_NAME, METADATA_FILE_NAME, TRASH_DIR_NAME,
-)
+from calibre.db.constants import COVER_FILE_NAME, DATA_DIR_NAME, METADATA_FILE_NAME, NOTES_DIR_NAME, TRASH_DIR_NAME
 from calibre.ebooks import BOOK_EXTENSIONS
 from calibre.utils.localization import _
 from polyglot.builtins import iteritems
 
 EBOOK_EXTENSIONS = frozenset(BOOK_EXTENSIONS)
 NORMALS = frozenset({METADATA_FILE_NAME, COVER_FILE_NAME, DATA_DIR_NAME})
-IGNORE_AT_TOP_LEVEL = frozenset({'metadata.db', 'metadata_db_prefs_backup.json', 'metadata_pre_restore.db', 'full-text-search.db', TRASH_DIR_NAME})
+IGNORE_AT_TOP_LEVEL = frozenset({
+    'metadata.db', 'metadata_db_prefs_backup.json', 'metadata_pre_restore.db', 'full-text-search.db', TRASH_DIR_NAME, NOTES_DIR_NAME
+})
 
 '''
 Checks fields:
@@ -185,7 +185,7 @@ class CheckLibrary:
         return False
 
     def process_book(self, lib, book_info):
-        (db_path, title_dir, book_id) = book_info
+        db_path, title_dir, book_id = book_info
         filenames = frozenset(f for f in os.listdir(os.path.join(lib, db_path))
                                if not self.ignore_name(f) and (
                                    os.path.splitext(f)[1] not in self.ignore_ext or

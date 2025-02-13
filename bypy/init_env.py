@@ -8,10 +8,8 @@ import re
 import subprocess
 import sys
 
-from bypy.constants import (
-    LIBDIR, PREFIX, PYTHON, SRC as CALIBRE_DIR, build_dir, islinux, ismacos,
-    worker_env
-)
+from bypy.constants import LIBDIR, PREFIX, PYTHON, build_dir, islinux, ismacos, worker_env
+from bypy.constants import SRC as CALIBRE_DIR
 from bypy.utils import run_shell
 
 dlls = [
@@ -26,20 +24,22 @@ dlls = [
     # 'WebView',
     'Positioning',
     'Sensors',
+    'SpatialAudio',
     'Sql',
     'Svg',
+    'TextToSpeech',
     'WebChannel',
     'WebEngineCore',
     'WebEngineWidgets',
     'Widgets',
-    # 'Multimedia',
+    'Multimedia',
+    'MultimediaWidgets',
     'OpenGL',
     'OpenGLWidgets',
     'Quick',
     'QuickWidgets',
     'Qml',
     'QmlModels',
-    # 'MultimediaWidgets',
     'Xml',
     # 'XmlPatterns',
 ]
@@ -58,6 +58,8 @@ QT_PLUGINS = [
     'imageformats',
     'iconengines',
     'tls',
+    'multimedia',
+    'texttospeech',
     # 'mediaservice',
     'platforms',
     # 'playlistformats',
@@ -84,7 +86,8 @@ PYQT_MODULES = (
     'QtCore',
     'QtGui',
     'QtNetwork',
-    # 'QtMultimedia', 'QtMultimediaWidgets',
+    'QtMultimedia', 'QtMultimediaWidgets',
+    'QtTextToSpeech',
     'QtPrintSupport',
     'QtSensors',
     'QtSvg',
@@ -110,9 +113,14 @@ def initialize_constants():
     nv = re.search(r'numeric_version\s+=\s+\((\d+), (\d+), (\d+)\)', src)
     calibre_constants['version'
                       ] = '%s.%s.%s' % (nv.group(1), nv.group(2), nv.group(3))
-    calibre_constants['appname'] = re.search(
-        r'__appname__\s+=\s+(u{0,1})[\'"]([^\'"]+)[\'"]', src
-    ).group(2)
+    def get_str_assign(which):
+        pat = r'__appname__\s+=\s+(u{0,1})[\'"]([^\'"]+)[\'"]'.replace('__appname__', which)
+        return re.search(pat, src).group(2)
+
+    calibre_constants['appname'] = get_str_assign('__appname__')
+    calibre_constants['MAIN_APP_UID'] = get_str_assign('MAIN_APP_UID')
+    calibre_constants['VIEWER_APP_UID'] = get_str_assign('VIEWER_APP_UID')
+    calibre_constants['EDITOR_APP_UID'] = get_str_assign('EDITOR_APP_UID')
     epsrc = re.compile(r'entry_points = (\{.*?\})',
                        re.DOTALL).search(read_cal_file('linux.py')).group(1)
     entry_points = eval(epsrc, {'__appname__': calibre_constants['appname']})

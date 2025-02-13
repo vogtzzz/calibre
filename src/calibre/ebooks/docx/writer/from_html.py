@@ -7,15 +7,16 @@ __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 import re
 from collections import Counter
 
-from calibre.ebooks.docx.writer.container import create_skeleton, page_size, page_effective_area
-from calibre.ebooks.docx.writer.styles import StylesManager, FloatSpec
-from calibre.ebooks.docx.writer.links import LinksManager
-from calibre.ebooks.docx.writer.images import ImagesManager
+from calibre.ebooks.docx.writer.container import create_skeleton, page_effective_area, page_size
 from calibre.ebooks.docx.writer.fonts import FontsManager
-from calibre.ebooks.docx.writer.tables import Table
+from calibre.ebooks.docx.writer.images import ImagesManager
+from calibre.ebooks.docx.writer.links import LinksManager
 from calibre.ebooks.docx.writer.lists import ListsManager
-from calibre.ebooks.oeb.stylizer import Stylizer as Sz, Style as St
+from calibre.ebooks.docx.writer.styles import FloatSpec, StylesManager
+from calibre.ebooks.docx.writer.tables import Table
 from calibre.ebooks.oeb.base import XPath, barename
+from calibre.ebooks.oeb.stylizer import Style as St
+from calibre.ebooks.oeb.stylizer import Stylizer as Sz
 from calibre.utils.localization import lang_as_iso639_1
 from polyglot.builtins import string_or_bytes
 
@@ -61,7 +62,7 @@ class TextRun:
         self.first_html_parent = first_html_parent
         if self.ws_pat is None:
             TextRun.ws_pat = self.ws_pat = re.compile(r'\s+')
-            TextRun.soft_hyphen_pat = self.soft_hyphen_pat = re.compile('(\u00ad)')
+            TextRun.soft_hyphen_pat = self.soft_hyphen_pat = re.compile(r'(\xad)')
         self.style = style
         self.texts = []
         self.link = None
@@ -116,8 +117,17 @@ class TextRun:
                 if text:
                     for x in self.soft_hyphen_pat.split(text):
                         if x == '\u00ad':
+                            # trailing spaces in <w:t> before a soft hyphen are
+                            # ignored, so put them in a preserve whitespace
+                            # element with a single space.
+                            if not preserve_whitespace and len(r) and r[-1].text and r[-1].text.endswith(' '):
+                                r[-1].text = r[-1].text.rstrip()
+                                add_text(' ', True)
                             makeelement(r, 'w:softHyphen')
                         elif x:
+                            if not preserve_whitespace and x.startswith(' ') and len(r) and r[-1].tag and 'softHyphen' in r[-1].tag:
+                                x = x.lstrip()
+                                add_text(' ', True)
                             add_text(x, preserve_whitespace)
                 else:
                     add_text('', preserve_whitespace)
@@ -249,7 +259,7 @@ class Block:
             makeelement(p, 'w:bookmarkEnd', w_id=bmark)
 
     def __repr__(self):
-        return 'Block(%r)' % self.runs
+        return f'Block({self.runs!r})'
     __str__ = __repr__
 
     def is_empty(self):
@@ -413,7 +423,7 @@ class Blocks:
                     block.block_lang = None
 
     def __repr__(self):
-        return 'Block(%r)' % self.runs
+        return f'Block({self.runs!r})'
 
 
 class Convert:
@@ -534,7 +544,7 @@ class Convert:
                 else:
                     if tagname == 'hr':
                         for edge in 'right bottom left'.split():
-                            tag_style.set('border-%s-style' % edge, 'none')
+                            tag_style.set(f'border-{edge}-style', 'none')
                     self.add_block_tag(tagname, html_tag, tag_style, stylizer, float_spec=float_spec)
 
             for child in html_tag.iterchildren():

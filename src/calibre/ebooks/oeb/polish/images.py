@@ -44,9 +44,7 @@ class Worker(Thread):
                 self.queue.task_done()
 
     def compress(self, name, path, mime_type):
-        from calibre.utils.img import (
-            encode_jpeg, encode_webp, optimize_jpeg, optimize_png, optimize_webp,
-        )
+        from calibre.utils.img import encode_jpeg, encode_webp, optimize_jpeg, optimize_png, optimize_webp
         if 'png' in mime_type:
             func = optimize_png
         elif 'webp' in mime_type:
@@ -100,7 +98,7 @@ def compress_images(container, report=None, names=None, jpeg_quality=None, webp_
         if not keep_going:
             abort.set()
     progress_callback(0, num_to_process, '')
-    [Worker(abort, 'CompressImage%d' % i, queue, results, jpeg_quality, webp_quality, pc) for i in range(min(detect_ncpus(), num_to_process))]
+    [Worker(abort, f'CompressImage{i}', queue, results, jpeg_quality, webp_quality, pc) for i in range(min(detect_ncpus(), num_to_process))]
     queue.join()
     before_total = after_total = 0
     processed_num = 0

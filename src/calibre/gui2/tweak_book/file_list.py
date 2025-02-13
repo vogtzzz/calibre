@@ -8,31 +8,51 @@ import sys
 import textwrap
 from collections import Counter, OrderedDict, defaultdict
 from functools import lru_cache, partial
+
 from qt.core import (
-    QAbstractItemView, QApplication, QCheckBox, QDialog, QDialogButtonBox, QFont,
-    QFormLayout, QGridLayout, QIcon, QInputDialog, QItemSelectionModel, QLabel,
-    QLineEdit, QListWidget, QListWidgetItem, QMenu, QPainter, QPixmap, QRadioButton,
-    QScrollArea, QSize, QSpinBox, QStyle, QStyledItemDelegate, Qt, QTimer, QTreeView,
-    QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget, pyqtSignal, sip,
+    QAbstractItemView,
+    QApplication,
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QFont,
+    QFormLayout,
+    QGridLayout,
+    QIcon,
+    QInputDialog,
+    QItemSelectionModel,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
+    QPainter,
+    QPixmap,
+    QRadioButton,
+    QScrollArea,
+    QSize,
+    QSpinBox,
+    QStyle,
+    QStyledItemDelegate,
+    Qt,
+    QTimer,
+    QTreeView,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
+    sip,
 )
 
 from calibre import human_readable, sanitize_file_name
 from calibre.ebooks.oeb.base import OEB_DOCS, OEB_STYLES
-from calibre.ebooks.oeb.polish.cover import (
-    get_cover_page_name, get_raster_cover_name, is_raster_image,
-)
+from calibre.ebooks.oeb.polish.cover import get_cover_page_name, get_raster_cover_name, is_raster_image
 from calibre.ebooks.oeb.polish.css import add_stylesheet_links
-from calibre.ebooks.oeb.polish.replace import (
-    get_recommended_folders, get_spine_order_for_all_files,
-)
+from calibre.ebooks.oeb.polish.replace import get_recommended_folders, get_spine_order_for_all_files
 from calibre.ebooks.oeb.polish.utils import OEB_FONTS, guess_type
-from calibre.gui2 import (
-    choose_dir, choose_files, choose_save_file, elided_text, error_dialog,
-    make_view_use_window_background, question_dialog,
-)
-from calibre.gui2.tweak_book import (
-    CONTAINER_DND_MIMETYPE, current_container, editors, tprefs,
-)
+from calibre.gui2 import choose_dir, choose_files, choose_save_file, elided_text, error_dialog, make_view_use_window_background, question_dialog
+from calibre.gui2.tweak_book import CONTAINER_DND_MIMETYPE, current_container, editors, tprefs
 from calibre.gui2.tweak_book.editor import syntax_from_mime
 from calibre.gui2.tweak_book.templates import template_for
 from calibre.startup import connect_lambda
@@ -277,7 +297,7 @@ class FileList(QTreeWidget, OpenWithHandler):
         self.rendered_emblem_cache = {}
         self.font_name_cache = {}
         self.top_level_pixmap_cache = {
-            name : QIcon.ic(icon).pixmap(TOP_ICON_SIZE, TOP_ICON_SIZE)
+            name: QIcon.ic(icon).pixmap(TOP_ICON_SIZE, TOP_ICON_SIZE)
             for name, icon in iteritems({
                 'text':'keyboard-prefs.png',
                 'styles':'lookfeel.png',
@@ -503,7 +523,7 @@ class FileList(QTreeWidget, OpenWithHandler):
             elif mt in OEB_DOCS:
                 category = 'text'
             ext = name.rpartition('.')[-1].lower()
-            if ext in {'ttf', 'otf', 'woff'}:
+            if ext in {'ttf', 'otf', 'woff', 'woff2'}:
                 # Probably wrong mimetype in the OPF
                 category = 'fonts'
             return category
@@ -763,8 +783,24 @@ class FileList(QTreeWidget, OpenWithHandler):
             for i in range(parent.childCount()):
                 item = parent.child(i)
                 if str(item.data(0, NAME_ROLE) or '') == name:
-                    return (category, i)
+                    return category, i
         return (None, -1)
+
+    def merge_files(self):
+        sel = self.selectedItems()
+        selected_map = defaultdict(list)
+        for item in sel:
+            selected_map[str(item.data(0, CATEGORY_ROLE) or '')].append(str(item.data(0, NAME_ROLE) or ''))
+
+        for items in selected_map.values():
+            items.sort(key=self.index_of_name)
+        if len(selected_map['text']) > 1:
+            self.start_merge('text', selected_map['text'])
+        elif len(selected_map['styles']) > 1:
+            self.start_merge('styles', selected_map['styles'])
+        else:
+            error_dialog(self, _('Cannot merge'), _(
+                'No files selected. Select two or more HTML files or two or more CSS files in the Files browser before trying to merge'), show=True)
 
     def start_merge(self, category, names):
         d = MergeDialog(names, self)
@@ -795,7 +831,7 @@ class FileList(QTreeWidget, OpenWithHandler):
                 skip_dialog_name='edit-book-mark-as-titlepage-move-confirm',
                 skip_dialog_skip_precheck=False
             )
-        self.mark_requested.emit(name, 'titlepage:%r' % move_to_start)
+        self.mark_requested.emit(name, f'titlepage:{move_to_start!r}')
 
     def mark_as_nav(self, name):
         self.mark_requested.emit(name, 'nav')
@@ -829,7 +865,7 @@ class FileList(QTreeWidget, OpenWithHandler):
         bad = names & current_container().names_that_must_not_be_changed
         if bad:
             error_dialog(self, _('Cannot rename'),
-                         _('The file(s) %s cannot be renamed.') % ('<b>%s</b>' % ', '.join(bad)), show=True)
+                         _('The file(s) %s cannot be renamed.') % ('<b>{}</b>'.format(', '.join(bad))), show=True)
             return
         names = sorted(names, key=self.index_of_name)
         return names
@@ -926,7 +962,7 @@ class FileList(QTreeWidget, OpenWithHandler):
         bad = names & current_container().names_that_must_not_be_removed
         if bad:
             return error_dialog(self, _('Cannot delete'),
-                         _('The file(s) %s cannot be deleted.') % ('<b>%s</b>' % ', '.join(bad)), show=True)
+                         _('The file(s) %s cannot be deleted.') % ('<b>{}</b>'.format(', '.join(bad))), show=True)
 
         text = self.categories['text']
         children = (text.child(i) for i in range(text.childCount()))
@@ -958,7 +994,7 @@ class FileList(QTreeWidget, OpenWithHandler):
         b = self.verticalScrollBar()
         if b.value() == b.maximum():
             b.setValue(b.minimum())
-            QTimer.singleShot(0, lambda : b.setValue(b.maximum()))
+            QTimer.singleShot(0, lambda: b.setValue(b.maximum()))
 
     def __enter__(self):
         self.ordered_selected_indexes = True
@@ -1258,11 +1294,17 @@ class FileListWidget(QWidget):
         self.setFocusProxy(self.file_list)
         self.edit_next_file = self.file_list.edit_next_file
 
+    def merge_completed(self, master_name):
+        self.file_list.select_name(master_name, set_as_current_index=True)
+
     def build(self, container, preserve_state=True):
         self.file_list.build(container, preserve_state=preserve_state)
 
     def restore_temp_names(self):
         self.file_list.restore_temp_names()
+
+    def merge_files(self):
+        self.file_list.merge_files()
 
     @property
     def searchable_names(self):

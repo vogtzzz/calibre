@@ -7,15 +7,15 @@ __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 import errno
 import os
 import re
+import shutil
 import sys
 from collections import OrderedDict, namedtuple
+from contextlib import suppress
 from locale import localeconv
 from threading import Lock
 
 from calibre import as_unicode, prints
-from calibre.constants import (
-    cache_dir, get_windows_number_formats, iswindows, preferred_encoding,
-)
+from calibre.constants import cache_dir, get_windows_number_formats, iswindows, preferred_encoding
 from calibre.utils.icu import lower as icu_lower
 from calibre.utils.localization import canonicalize_lang
 from polyglot.builtins import iteritems, itervalues, string_or_bytes
@@ -107,7 +107,6 @@ class CacheError(Exception):
 
 
 class ThumbnailCache:
-
     ' This is a persistent disk cache to speed up loading and resizing of covers '
 
     def __init__(self,
@@ -116,7 +115,10 @@ class ThumbnailCache:
                  thumbnail_size=(100, 100),   # The size of the thumbnails, can be changed
                  location=None,   # The location for this cache, if None cache_dir() is used
                  test_mode=False,  # Used for testing
-                 min_disk_cache=0):  # If the size is set less than or equal to this value, the cache is disabled.
+                 min_disk_cache=0,  # If the size is set less than or equal to this value, the cache is disabled.
+                 version=0  # Increase this if the cache content format might have changed.
+                 ):
+        self.version = version
         self.location = os.path.join(location or cache_dir(), name)
         if max_size <= min_disk_cache:
             max_size = 0
@@ -144,9 +146,27 @@ class ThumbnailCache:
             self.log('Failed to delete cached thumbnail file:', as_unicode(err))
 
     def _load_index(self):
-        'Load the index, automatically removing incorrectly sized thumbnails and pruning to fit max_size'
+        '''
+        Load the index, automatically removing incorrectly sized thumbnails and
+        pruning to fit max_size
+        '''
+
+        # Remove the cache if it isn't the current version
+        version_path = os.path.join(self.location, 'version')
+        current_version = 0
+        with suppress(Exception), open(version_path) as f:
+            current_version = int(f.read())
+        if current_version != self.version:
+            # The version number changed. Delete the cover cache. Can't delete
+            # it if it isn't there (first time). Note that this will not work
+            # well if the same cover cache name is used with different versions.
+            if os.path.exists(self.location):
+                shutil.rmtree(self.location)
+
         try:
             os.makedirs(self.location)
+            with open(version_path, 'w') as f:
+                f.write(str(self.version))
         except OSError as err:
             if err.errno != errno.EEXIST:
                 self.log('Failed to make thumbnail cache dir:', as_unicode(err))
@@ -181,7 +201,7 @@ class ThumbnailCache:
                     try:
                         uuid, book_id = line.partition(' ')[0::2]
                         book_id = int(book_id)
-                        return (uuid, book_id)
+                        return uuid, book_id
                     except Exception:
                         return None
                 invalidate = {record(x) for x in raw.splitlines()}
@@ -205,7 +225,7 @@ class ThumbnailCache:
         except OSError as err:
             self.log('Failed to read thumbnail cache dir:', as_unicode(err))
 
-        self.items = OrderedDict(sorted(items, key=lambda x:order.get(x[0], 0)))
+        self.items = OrderedDict(sorted(items, key=lambda x: order.get(x[0], 0)))
         self._apply_size()
 
     def _invalidate_sizes(self):
@@ -274,10 +294,8 @@ class ThumbnailCache:
             if not hasattr(self, 'total_size'):
                 self._load_index()
             self._invalidate_sizes()
-            ts = ('%.2f' % timestamp).replace('.00', '')
-            path = '%s%s%s%s%d-%s-%d-%dx%d' % (
-                self.group_id, os.sep, book_id % 100, os.sep,
-                book_id, ts, len(data), self.thumbnail_size[0], self.thumbnail_size[1])
+            ts = (f'{timestamp:.2f}').replace('.00', '')
+            path = f'{self.group_id}{os.sep}{book_id % 100}{os.sep}{book_id}-{ts}-{len(data)}-{self.thumbnail_size[0]}x{self.thumbnail_size[1]}'
             path = os.path.join(self.location, path)
             key = (self.group_id, book_id)
             e = self.items.pop(key, None)
@@ -351,7 +369,7 @@ class ThumbnailCache:
                     self._remove((self.group_id, book_id))
             elif os.path.exists(self.location):
                 try:
-                    raw = '\n'.join('%s %d' % (self.group_id, book_id) for book_id in book_ids)
+                    raw = '\n'.join(f'{self.group_id} {book_id}' for book_id in book_ids)
                     with open(os.path.join(self.location, 'invalidate'), 'ab') as f:
                         f.write(raw.encode('ascii'))
                 except OSError as err:

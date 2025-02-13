@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# vim:fileencoding=utf-8
 # License: GPL v3 Copyright: 2022, Kovid Goyal <kovid at kovidgoyal.net>
 
 
@@ -21,7 +20,7 @@ class SimpleContainer(ContainerBase):
     tweak_mode = True
 
 
-skipped_tags = frozenset({'style', 'title', 'script', 'head', 'img', 'svg', 'math'})
+skipped_tags = frozenset({'style', 'title', 'script', 'head', 'img', 'svg', 'math', 'rt', 'rp', 'rtc'})
 
 
 def tag_to_text(tag):
@@ -44,7 +43,7 @@ def html_to_text(root):
     pat = re.compile(r'\n{3,}')
     for body in root.xpath('h:body', namespaces=XPNSMAP):
         body.tail = ''
-        yield pat.sub('\n\n', ''.join(tag_to_text(body)).strip())
+        yield pat.sub(r'\n\n', ''.join(tag_to_text(body)).strip())
 
 
 def to_text(container, name):
@@ -70,6 +69,7 @@ def pdftotext(path):
     cmd = [PDFTOTEXT] + '-enc UTF-8 -nodiag -eol unix'.split() + [os.path.basename(path), '-']
     p = popen(cmd, cwd=os.path.dirname(path), stdout=subprocess.PIPE, stdin=subprocess.DEVNULL)
     raw = p.stdout.read()
+    p.stdout.close()
     if p.wait() != 0:
         return ''
     return clean_ascii_chars(raw).decode('utf-8', 'replace')

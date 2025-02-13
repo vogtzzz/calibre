@@ -31,7 +31,7 @@ automatically change the case of all text inside heading tags to title case::
     Find expression: <([Hh][1-6])[^>]*>.+?</\1>
 
 For the function, simply choose the :guilabel:`Title-case text (ignore tags)` builtin
-function. The will change titles that look like: ``<h1>some TITLE</h1>`` to
+function. The will change titles that look like: ``<h1>some titLE</h1>`` to
 ``<h1>Some Title</h1>``. It will work even if there are other HTML tags inside
 the heading tags.
 
@@ -176,9 +176,9 @@ Contents based on these headings. Create the custom function below:
                     parent = root.children[-1] if tag_name == 'h2' and root.children else root
                     parent.add(text, file_name, anchor)
                 toc = toc_to_html(root, current_container(), 'toc.html', 'Table of Contents for ' + metadata.title, metadata.language)
-                print (xml2str(toc))
+                print(xml2str(toc))
             else:
-                print ('No headings to build ToC from found')
+                print('No headings to build ToC from found')
         else:
             # Add an entry corresponding to this match to the Table of Contents
             if 'toc' not in data:

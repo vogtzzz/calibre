@@ -1,10 +1,15 @@
+#!/usr/bin/env python
+# vim:fileencoding=utf-8
 '''
 washingtonpost.com
 '''
 
-from calibre.web.feeds.news import BasicNewsRecipe
-from html5_parser import parse
 import json
+
+from html5_parser import parse
+
+from calibre.web.feeds.news import BasicNewsRecipe
+
 
 class wapoprint(BasicNewsRecipe):
     title = 'The Washington Post | Print Edition'
@@ -20,7 +25,7 @@ class wapoprint(BasicNewsRecipe):
     no_stylesheets = True
     use_embedded_content = False
     encoding = 'utf-8'
-    language = 'en'
+    language = 'en_US'
     remove_attributes = ['style', 'height', 'width']
     publication_type = 'newspaper'
     ignore_duplicate_articles = {'title', 'url'}
@@ -30,6 +35,10 @@ class wapoprint(BasicNewsRecipe):
         .auth { font-weight:bold; font-size:small; }
         .time { font-size:small; color: #202020; }
     '''
+
+    def get_browser(self):
+        return BasicNewsRecipe.get_browser(
+            self, verify_ssl_certificates=False, user_agent='Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0')
 
     def parse_index(self):
         soup = self.index_to_soup('https://www.washingtonpost.com/todays_paper/updates/')
@@ -68,8 +77,8 @@ class wapoprint(BasicNewsRecipe):
 
         author = ''
         if 'credits' in data:
-            author = '<div><span class="auth">' + 'By ' + ', '.join(x['name'] for x in data['credits']['by']) \
-                 + '</span> | <span class="time">' + data['publish_date'][:-14] + '</span></div>'
+            author = ('<div><span class="auth">' + 'By ' + ', '.join(x['name'] for x in data['credits']['by']) +
+                      '</span> | <span class="time">' + data['publish_date'][:-14] + '</span></div>')
 
         body = ''
         for x in data['content_elements']:

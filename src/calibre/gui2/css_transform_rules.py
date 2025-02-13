@@ -2,17 +2,25 @@
 # License: GPLv3 Copyright: 2016, Kovid Goyal <kovid at kovidgoyal.net>
 
 
-from qt.core import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QLineEdit,
-    QPushButton, QSize, pyqtSignal, QMenu, QDialogButtonBox, QTextCursor
-)
+from qt.core import QComboBox, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton, QSize, QTextCursor, QVBoxLayout, QWidget, pyqtSignal
 
 from calibre.ebooks.css_transform_rules import (
-    validate_rule, safe_parser, compile_rules, transform_sheet, ACTION_MAP, MATCH_TYPE_MAP, export_rules, import_rules)
-from calibre.gui2 import error_dialog, elided_text, choose_save_file, choose_files
-from calibre.gui2.tag_mapper import (
-    RuleEdit as RE, RuleEditDialog as RuleEditDialogBase, Rules as RulesBase,
-    RulesDialog as RulesDialogBase, RuleItem as RuleItemBase, SaveLoadMixin)
+    ACTION_MAP,
+    MATCH_TYPE_MAP,
+    compile_rules,
+    export_rules,
+    import_rules,
+    safe_parser,
+    transform_sheet,
+    validate_rule,
+)
+from calibre.gui2 import choose_files, choose_save_file, elided_text, error_dialog
+from calibre.gui2.tag_mapper import RuleEdit as RE
+from calibre.gui2.tag_mapper import RuleEditDialog as RuleEditDialogBase
+from calibre.gui2.tag_mapper import RuleItem as RuleItemBase
+from calibre.gui2.tag_mapper import Rules as RulesBase
+from calibre.gui2.tag_mapper import RulesDialog as RulesDialogBase
+from calibre.gui2.tag_mapper import SaveLoadMixin
 from calibre.gui2.widgets2 import Dialog
 from calibre.utils.config import JSONConfig
 from calibre.utils.localization import localize_user_manual_link
@@ -171,7 +179,7 @@ class RuleItem(RuleItemBase):  # {{{
                     match_type=MATCH_TYPE_MAP[rule['match_type']], query=query)
             if rule['action_data']:
                 ad = elided_text(rule['action_data'], font=parent.font(), width=200, pos='right')
-                text += ' <code>%s</code>' % ad
+                text += f' <code>{ad}</code>'
         except Exception:
             import traceback
             traceback.print_exc()
@@ -196,7 +204,7 @@ class Tester(Dialog):  # {{{
     PREFS_NAME = 'test-style-transform-rules'
     LABEL = _('Enter a CSS stylesheet below and click the "Test" button')
     SYNTAX = 'css'
-    RESULTS = '/* %s */\n\n' % _('Resulting stylesheet')
+    RESULTS = '/* {} */\n\n'.format(_('Resulting stylesheet'))
 
     def __init__(self, rules, parent=None):
         self.rules = self.compile_rules(rules)

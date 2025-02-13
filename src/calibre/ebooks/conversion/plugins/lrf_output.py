@@ -5,10 +5,10 @@ __license__   = 'GPL v3'
 __copyright__ = '2009, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import sys, os
+import os
+import sys
 
-from calibre.customize.conversion import OutputFormatPlugin
-from calibre.customize.conversion import OptionRecommendation
+from calibre.customize.conversion import OptionRecommendation, OutputFormatPlugin
 
 
 class LRFOptions:
@@ -102,7 +102,7 @@ class LRFOutput(OutputFormatPlugin):
         OptionRecommendation(name='header', recommended_value=False,
             help=_('Add a header to all the pages with title and author.')
         ),
-        OptionRecommendation(name='header_format', recommended_value="%t by %a",
+        OptionRecommendation(name='header_format', recommended_value='%t by %a',
             help=_('Set the format of the header. %a is replaced by the author '
             'and %t by the title. Default is %default')
         ),
@@ -138,9 +138,10 @@ class LRFOutput(OutputFormatPlugin):
         ('change_justification', 'original', OptionRecommendation.HIGH)}
 
     def convert_images(self, pages, opts, wide):
-        from calibre.ebooks.lrf.pylrs.pylrs import Book, BookSetting, ImageStream, ImageBlock
         from uuid import uuid4
+
         from calibre.constants import __appname__, __version__
+        from calibre.ebooks.lrf.pylrs.pylrs import Book, BookSetting, ImageBlock, ImageStream
 
         width, height = (784, 1012) if wide else (584, 754)
 
@@ -152,7 +153,7 @@ class LRFOutput(OutputFormatPlugin):
         ps['textheight']     = height
         book = Book(title=opts.title, author=opts.author,
                 bookid=uuid4().hex,
-                publisher='%s %s'%(__appname__, __version__),
+                publisher=f'{__appname__} {__version__}',
                 category=_('Comic'), pagestyledefault=ps,
                 booksetting=BookSetting(screenwidth=width, screenheight=height))
         for page in pages:

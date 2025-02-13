@@ -5,40 +5,41 @@ __license__   = 'GPL v3'
 __copyright__ = '2009, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import os, shutil, re
+import os
+import re
+import shutil
 
-from calibre.customize.conversion import (OutputFormatPlugin,
-        OptionRecommendation)
-from calibre.ptempfile import TemporaryDirectory
 from calibre import CurrentDir
+from calibre.customize.conversion import OptionRecommendation, OutputFormatPlugin
+from calibre.ptempfile import TemporaryDirectory
 from polyglot.builtins import as_bytes
 
 block_level_tags = (
-      'address',
-      'body',
-      'blockquote',
-      'center',
-      'dir',
-      'div',
-      'dl',
-      'fieldset',
-      'form',
-      'h1',
-      'h2',
-      'h3',
-      'h4',
-      'h5',
-      'h6',
-      'hr',
-      'isindex',
-      'menu',
-      'noframes',
-      'noscript',
-      'ol',
-      'p',
-      'pre',
-      'table',
-      'ul',
+    'address',
+    'body',
+    'blockquote',
+    'center',
+    'dir',
+    'div',
+    'dl',
+    'fieldset',
+    'form',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'hr',
+    'isindex',
+    'menu',
+    'noframes',
+    'noscript',
+    'ol',
+    'p',
+    'pre',
+    'table',
+    'ul',
 )
 
 
@@ -76,7 +77,7 @@ class EPUBOutput(OutputFormatPlugin):
         ),
 
         OptionRecommendation(name='no_default_epub_cover', recommended_value=False,
-            help=_('Normally, if the input file has no cover and you don\'t'
+            help=_("Normally, if the input file has no cover and you don't"
             ' specify one, a default cover is generated with the title, '
             'authors, etc. This option disables the generation of this cover.')
         ),
@@ -115,7 +116,7 @@ class EPUBOutput(OutputFormatPlugin):
         ),
 
         OptionRecommendation(name='toc_title', recommended_value=None,
-            help=_('Title for any generated in-line table of contents.')
+            help=_('Title for any generated inline table of contents.')
         ),
 
         OptionRecommendation(name='epub_version', recommended_value='2', choices=ui_data['versions'],
@@ -157,7 +158,7 @@ class EPUBOutput(OutputFormatPlugin):
 
     def upshift_markup(self):  # {{{
         'Upgrade markup to comply with XHTML 1.1 where possible'
-        from calibre.ebooks.oeb.base import XPath, XML
+        from calibre.ebooks.oeb.base import XML, XPath
         for x in self.oeb.spine:
             root = x.data
             if (not root.get(XML('lang'))) and (root.get('lang')):
@@ -204,6 +205,7 @@ class EPUBOutput(OutputFormatPlugin):
             from calibre.ebooks.oeb.transforms.filenames import UniqueFilenames
             UniqueFilenames()(oeb, opts)
 
+        self.oeb.set_page_progression_direction_if_needed()
         self.workaround_ade_quirks()
         self.workaround_webkit_quirks()
         self.upshift_markup()
@@ -333,7 +335,7 @@ class EPUBOutput(OutputFormatPlugin):
 
         key = re.sub(r'[^a-fA-F0-9]', '', uuid)
         if len(key) < 16:
-            raise ValueError('UUID identifier %r is invalid'%uuid)
+            raise ValueError(f'UUID identifier {uuid!r} is invalid')
         key = bytearray(from_hex_bytes((key + key)[:32]))
         paths = []
         with CurrentDir(tdir):
@@ -360,10 +362,10 @@ class EPUBOutput(OutputFormatPlugin):
                 <enc:EncryptedData>
                     <enc:EncryptionMethod Algorithm="http://ns.adobe.com/pdf/enc#RC"/>
                     <enc:CipherData>
-                    <enc:CipherReference URI="%s"/>
+                    <enc:CipherReference URI="{}"/>
                     </enc:CipherData>
                 </enc:EncryptedData>
-                '''%(uri.replace('"', '\\"')))
+                '''.format(uri.replace('"', '\\"')))
             if fonts:
                 ans = '''<encryption
                     xmlns="urn:oasis:names:tc:opendocument:xmlns:container"
@@ -394,7 +396,7 @@ class EPUBOutput(OutputFormatPlugin):
         Perform various markup transforms to get the output to render correctly
         in the quirky ADE.
         '''
-        from calibre.ebooks.oeb.base import XPath, XHTML, barename, urlunquote
+        from calibre.ebooks.oeb.base import XHTML, XPath, barename, urlunquote
 
         stylesheet = self.oeb.manifest.main_stylesheet
         # ADE cries big wet tears when it encounters an invalid fragment
@@ -407,7 +409,7 @@ class EPUBOutput(OutputFormatPlugin):
                 frag = urlunquote(frag)
                 if frag and frag_pat.match(frag) is None:
                     self.log.warn(
-                            'Removing fragment identifier %r from TOC as Adobe Digital Editions cannot handle it'%frag)
+                            f'Removing fragment identifier {frag!r} from TOC as Adobe Digital Editions cannot handle it')
                     node.href = base
 
         for x in self.oeb.spine:
@@ -450,7 +452,7 @@ class EPUBOutput(OutputFormatPlugin):
                     br.tag = XHTML('p')
                     br.text = '\u00a0'
                     style = br.get('style', '').split(';')
-                    style = list(filter(None, map(lambda x: x.strip(), style)))
+                    style = list(filter(None, (x.strip() for x in style)))
                     style.append('margin:0pt; border:0pt')
                     # If the prior tag is a block (including a <br> we replaced)
                     # then this <br> replacement should have a 1-line height.
@@ -501,7 +503,7 @@ class EPUBOutput(OutputFormatPlugin):
                     tag.tag = XHTML('div')
 
             # ADE fails to render non breaking hyphens/soft hyphens/zero width spaces
-            special_chars = re.compile('[\u200b\u00ad]')
+            special_chars = re.compile(r'[\u200b\u00ad]')
             for elem in root.iterdescendants('*'):
                 if elem.text:
                     elem.text = special_chars.sub('', elem.text)
@@ -534,11 +536,11 @@ class EPUBOutput(OutputFormatPlugin):
         '''
         Perform toc link transforms to alleviate slow loading.
         '''
-        from calibre.ebooks.oeb.base import urldefrag, XPath
+        from calibre.ebooks.oeb.base import XPath, urldefrag
         from calibre.ebooks.oeb.polish.toc import item_at_top
 
         def frag_is_at_top(root, frag):
-            elem = XPath('//*[@id="%s" or @name="%s"]'%(frag, frag))(root)
+            elem = XPath(f'//*[@id="{frag}" or @name="{frag}"]')(root)
             if elem:
                 elem = elem[0]
             else:

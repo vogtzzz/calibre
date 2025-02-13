@@ -5,9 +5,9 @@ __license__   = 'GPL v3'
 __copyright__ = '2010, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
+from calibre.gui2 import error_dialog
 from calibre.gui2.actions import InterfaceAction
 from calibre.gui2.dialogs.template_dialog import TemplateDialog
-from calibre.gui2 import error_dialog
 
 
 class ShowTemplateTesterAction(InterfaceAction):
@@ -31,7 +31,7 @@ class ShowTemplateTesterAction(InterfaceAction):
         #                 text=self.non_modal_window_title,
         #                 icon='debug.png',
         #                 triggered=partial(self.show_template_editor, modal=False))
-        self.non_modal_dialogs = list()
+        self.non_modal_dialogs = []
 
     def last_template_text(self):
         return self.previous_text

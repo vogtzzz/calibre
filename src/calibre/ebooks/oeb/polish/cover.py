@@ -2,10 +2,12 @@ __license__   = 'GPL v3'
 __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import shutil, re, os
+import os
+import re
+import shutil
 
-from calibre.ebooks.oeb.base import OPF, OEB_DOCS, XPath, XLINK, xml2text
-from calibre.ebooks.oeb.polish.replace import replace_links, get_recommended_folders
+from calibre.ebooks.oeb.base import OEB_DOCS, OPF, XLINK, XPath, xml2text
+from calibre.ebooks.oeb.polish.replace import get_recommended_folders, replace_links
 from calibre.utils.imghdr import identify
 from polyglot.builtins import iteritems
 
@@ -94,18 +96,18 @@ def mark_as_cover(container, name):
     Mark the specified image as the cover image.
     '''
     if name not in container.mime_map:
-        raise ValueError('Cannot mark %s as cover as it does not exist' % name)
+        raise ValueError(f'Cannot mark {name} as cover as it does not exist')
     mt = container.mime_map[name]
     if not is_raster_image(mt):
-        raise ValueError('Cannot mark %s as the cover image as it is not a raster image' % name)
+        raise ValueError(f'Cannot mark {name} as the cover image as it is not a raster image')
     if container.book_type == 'azw3':
         mark_as_cover_azw3(container, name)
     else:
         mark_as_cover_epub(container, name)
 
+
 ###############################################################################
 # The delightful EPUB cover processing
-
 
 def is_raster_image(media_type):
     return media_type and media_type.lower() in {
@@ -186,7 +188,7 @@ def get_guides(container):
 def mark_as_cover_epub(container, name):
     mmap = {v:k for k, v in iteritems(container.manifest_id_map)}
     if name not in mmap:
-        raise ValueError('Cannot mark %s as cover as it is not in manifest' % name)
+        raise ValueError(f'Cannot mark {name} as cover as it is not in manifest')
     mid = mmap[name]
     ver = container.opf_version_parsed
 
@@ -338,7 +340,7 @@ def create_epub_cover(container, cover_path, existing_image, options=None):
     if existing_image:
         raster_cover = existing_image
         manifest_id = {v:k for k, v in iteritems(container.manifest_id_map)}[existing_image]
-        raster_cover_item = container.opf_xpath('//opf:manifest/*[@id="%s"]' % manifest_id)[0]
+        raster_cover_item = container.opf_xpath(f'//opf:manifest/*[@id="{manifest_id}"]')[0]
     else:
         folder = recommended_folders[cname]
         if folder:
@@ -377,10 +379,10 @@ def create_epub_cover(container, cover_path, existing_image, options=None):
                     with open(cover_path, 'rb') as csrc:
                         width, height = identify(csrc)[1:]
             except:
-                container.log.exception("Failed to get width and height of cover")
+                container.log.exception('Failed to get width and height of cover')
             ar = 'xMidYMid meet' if keep_aspect else 'none'
             templ = CoverManager.SVG_TEMPLATE.replace('__ar__', ar)
-            templ = templ.replace('__viewbox__', '0 0 %d %d'%(width, height))
+            templ = templ.replace('__viewbox__', f'0 0 {width} {height}')
             templ = templ.replace('__width__', str(width))
             templ = templ.replace('__height__', str(height))
     folder = recommended_folders[tname]

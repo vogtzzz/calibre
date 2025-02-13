@@ -8,12 +8,11 @@ __docformat__ = 'restructuredtext en'
 import os
 from collections import OrderedDict
 from itertools import count
-from qt.core import (
-    QCheckBox, QDialog, QDialogButtonBox, QGridLayout, QIcon, QLabel, QTimer,
-)
+
+from qt.core import QCheckBox, QDialog, QDialogButtonBox, QGridLayout, QIcon, QLabel, QTimer
 
 from calibre.gui2 import error_dialog, gprefs, question_dialog
-from calibre.gui2.actions import InterfaceAction
+from calibre.gui2.actions import InterfaceActionWithLibraryDrop
 from calibre.startup import connect_lambda
 from calibre.utils.monotonic import monotonic
 from polyglot.builtins import iteritems
@@ -68,32 +67,13 @@ class ChooseFormat(QDialog):  # {{{
 # }}}
 
 
-class ToCEditAction(InterfaceAction):
+class ToCEditAction(InterfaceActionWithLibraryDrop):
 
     name = 'Edit ToC'
     action_spec = (_('Edit ToC'), 'toc.png',
                    _('Edit the Table of Contents in your books'), _('K'))
     dont_add_to = frozenset(['context-menu-device'])
     action_type = 'current'
-    accepts_drops = True
-
-    def accept_enter_event(self, event, mime_data):
-        if mime_data.hasFormat("application/calibre+from_library"):
-            return True
-        return False
-
-    def accept_drag_move_event(self, event, mime_data):
-        if mime_data.hasFormat("application/calibre+from_library"):
-            return True
-        return False
-
-    def drop_event(self, event, mime_data):
-        mime = 'application/calibre+from_library'
-        if mime_data.hasFormat(mime):
-            self.dropped_ids = tuple(map(int, mime_data.data(mime).data().split()))
-            QTimer.singleShot(1, self.do_drop)
-            return True
-        return False
 
     def do_drop(self):
         book_id_map = self.get_supported_books(self.dropped_ids)
@@ -115,7 +95,7 @@ class ToCEditAction(InterfaceAction):
         if not ans:
             error_dialog(self.gui, _('Cannot edit ToC'),
                 _('Editing Table of Contents is only supported for books in the %s'
-                  ' formats. Convert to one of those formats before polishing.')
+                  ' formats. Convert to one of those formats before editing.')
                          %_(' or ').join(sorted(supported)), show=True)
         ans = OrderedDict(ans)
         if len(ans) > 5:
@@ -156,7 +136,7 @@ class ToCEditAction(InterfaceAction):
         from calibre.utils.shm import SharedMemory
         db = self.gui.current_db
         path = db.format(book_id, fmt, index_is_id=True, as_path=True)
-        title = db.title(book_id, index_is_id=True) + ' [%s]'%fmt
+        title = db.title(book_id, index_is_id=True) + f' [{fmt}]'
         job = {'path': path, 'title': title}
         data = json.dumps(job).encode('utf-8')
         header = struct.pack('>II', 0, 0)

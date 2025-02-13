@@ -4,6 +4,7 @@
 
 import re
 import textwrap
+
 from qt.core import QAbstractItemView, QAbstractTableModel, QFont, Qt
 
 from calibre.gui2 import gprefs
@@ -105,7 +106,7 @@ class EmailAccounts(QAbstractTableModel):  # {{{
         if role in [Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole]:
             if col == 0:
                 return (account)
-            if col ==  1:
+            if col == 1:
                 return ', '.join(x.strip() for x in (self.accounts[account][0] or '').split(','))
             if col == 2:
                 return (self.subjects.get(account, ''))
@@ -145,7 +146,7 @@ class EmailAccounts(QAbstractTableModel):  # {{{
             if aval:
                 self.tags[account] = aval
         elif col == 1:
-            self.accounts[account][0] = re.sub(',+', ',', re.sub(r'\s+', ',', as_unicode(value or '').upper()))
+            self.accounts[account][0] = re.sub(r',+', ',', re.sub(r'\s+', ',', as_unicode(value or '').upper()))
         elif col == 0:
             na = as_unicode(value or '').strip()
             from email.utils import parseaddr
@@ -258,7 +259,7 @@ class ConfigWidget(ConfigWidgetBase, Ui_Form):
         to_set = bool(self._email_accounts.accounts)
         if not self.send_email_widget.set_email_settings(to_set):
             raise AbortCommit('abort')
-        self.proxy['accounts'] =  self._email_accounts.accounts
+        self.proxy['accounts'] = self._email_accounts.accounts
         self.proxy['subjects'] = self._email_accounts.subjects
         self.proxy['aliases'] = self._email_accounts.aliases
         self.proxy['tags'] = self._email_accounts.tags

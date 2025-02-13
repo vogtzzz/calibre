@@ -2,10 +2,13 @@
 # License: GPLv3 Copyright: 2016, Kovid Goyal <kovid at kovidgoyal.net>
 
 
-import os, sys, subprocess, binascii, json
+import binascii
+import json
+import os
+import subprocess
+import sys
 
 from setup import Command
-
 
 d = os.path.dirname
 
@@ -160,7 +163,7 @@ class BuildInstaller(Command):
 class BuildInstallers(BuildInstaller):
 
     OS = ''
-    ALL_ARCHES = '64',
+    ALL_ARCHES = ('64',)
 
     def run(self, opts):
         for bitness in self.ALL_ARCHES:
@@ -225,7 +228,7 @@ class ExportPackages(Command):
         base, bypy = get_paths()
         exe = get_exe()
         for which in ('linux', 'macos', 'windows'):
-            cmd = [exe, bypy, 'export'] + ['download.calibre-ebook.com:/srv/download/ci/calibre6'] + [which]
+            cmd = [exe, bypy, 'export'] + ['download.calibre-ebook.com:/srv/download/ci/calibre7'] + [which]
             ret = subprocess.Popen(cmd).wait()
             if ret != 0:
                 raise SystemExit(ret)
@@ -248,9 +251,9 @@ class ExtDev(Command):
             bin_dir = '/cygdrive/c/Program Files/Calibre2'
         elif which == 'macos':
             ext_dir = build_only(which, '', ext)
-            src = os.path.join(ext_dir, os.path.basename(path))
+            src = os.path.join(ext_dir, f'{ext}.so')
             print(
-                "\n\n\x1b[33;1mWARNING: This does not work on macOS, unless you use un-signed builds with ",
+                '\n\n\x1b[33;1mWARNING: This does not work on macOS, unless you use un-signed builds with ',
                 ' ./update-on-ox develop\x1b[m',
                 file=sys.stderr, end='\n\n\n')
             host = 'ox'

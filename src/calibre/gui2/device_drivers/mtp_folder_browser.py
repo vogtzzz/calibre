@@ -6,10 +6,8 @@ __copyright__ = '2012, Kovid Goyal <kovid at kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
 from operator import attrgetter
-from qt.core import (
-    QDialog, QDialogButtonBox, QIcon, QLabel, QSize, Qt, QTabWidget, QTreeWidget,
-    QTreeWidgetItem, QVBoxLayout, pyqtSignal,
-)
+
+from qt.core import QDialog, QDialogButtonBox, QIcon, QLabel, QSize, Qt, QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, pyqtSignal
 
 from calibre.gui2 import file_icon_provider
 from calibre.utils.icu import lower as icu_lower
@@ -18,7 +16,7 @@ from calibre.utils.icu import lower as icu_lower
 def browser_item(f, parent):
     name = f.name
     if not f.is_folder:
-        name += ' [%s]'%f.last_mod_string
+        name += f' [{f.last_mod_string}]'
     ans = QTreeWidgetItem(parent, [name])
     ans.setData(0, Qt.ItemDataRole.UserRole, f.full_path)
     if f.is_folder:
@@ -245,4 +243,4 @@ def ignored_folders():
 
 if __name__ == '__main__':
     print(browse())
-    # print ('Ignored:', ignored_folders())
+    # print('Ignored:', ignored_folders())

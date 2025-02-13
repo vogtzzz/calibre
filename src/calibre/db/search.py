@@ -6,19 +6,19 @@ __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
 import operator
-import regex
 import weakref
 from collections import OrderedDict, deque
 from datetime import timedelta
 from functools import partial
 
+import regex
+
 from calibre.constants import DEBUG, preferred_encoding
 from calibre.db.utils import force_to_bool
 from calibre.utils.config_base import prefs
 from calibre.utils.date import UNDEFINED_DATE, dt_as_local, now, parse_date
-from calibre.utils.icu import (
-    lower as icu_lower, primary_contains, primary_no_punc_contains, sort_key,
-)
+from calibre.utils.icu import lower as icu_lower
+from calibre.utils.icu import primary_contains, primary_no_punc_contains, sort_key
 from calibre.utils.localization import canonicalize_lang, lang_map
 from calibre.utils.search_query_parser import ParseException, SearchQueryParser
 from polyglot.builtins import iteritems, string_or_bytes
@@ -28,8 +28,8 @@ EQUALS_MATCH   = 1
 REGEXP_MATCH   = 2
 ACCENT_MATCH   = 3
 
-# Utils {{{
 
+# Utils {{{
 
 def _matchkind(query, case_sensitive=False):
     matchkind = CONTAINS_MATCH
@@ -108,7 +108,7 @@ class DateSearch:  # {{{
         self.local_today         = {'_today', 'today', icu_lower(_('today'))}
         self.local_yesterday     = {'_yesterday', 'yesterday', icu_lower(_('yesterday'))}
         self.local_thismonth     = {'_thismonth', 'thismonth', icu_lower(_('thismonth'))}
-        self.daysago_pat = regex.compile(r'(%s|daysago|_daysago)$'%_('daysago'), flags=regex.UNICODE | regex.VERSION1)
+        self.daysago_pat = regex.compile(r'({}|daysago|_daysago)$'.format(_('daysago')), flags=regex.UNICODE | regex.VERSION1)
 
     def eq(self, dbdate, query, field_count):
         if dbdate.year == query.year:
@@ -416,7 +416,7 @@ class SavedSearchQueries:  # {{{
             self._db = weakref.ref(db)
         except TypeError:
             # db could be None
-            self._db = lambda : None
+            self._db = lambda: None
         self.load_from_db()
 
     def load_from_db(self):
@@ -657,7 +657,7 @@ class Parser(SearchQueryParser):  # {{{
 
         if location == 'template':
             try:
-                template, sep, query = regex.split('#@#:([tdnb]):', query, flags=regex.IGNORECASE)
+                template, sep, query = regex.split(r'#@#:([tdnb]):', query, flags=regex.IGNORECASE)
                 if sep:
                     sep = sep.lower()
                 else:
@@ -671,13 +671,13 @@ class Parser(SearchQueryParser):  # {{{
             matches = set()
             error_string = '*@*TEMPLATE_ERROR*@*'
             template_cache = {}
-            global_vars = {}
+            global_vars = {'_candidates': candidates}
             for book_id in candidates:
                 mi = self.dbcache.get_proxy_metadata(book_id)
                 val = mi.formatter.safe_format(template, {}, error_string, mi,
                                             column_name='search template',
                                             template_cache=template_cache,
-                                            global_vars=global_vars)
+                                            global_vars=global_vars, database=self.dbcache)
                 if val.startswith(error_string):
                     raise ParseException(val[len(error_string):])
                 if sep == 't':
@@ -958,7 +958,7 @@ class Search:
     def query_is_cacheable(self, sqp, dbcache, query):
         if query:
             for name, value in sqp.get_queried_fields(query):
-                if name == 'template' and '#@#:d:' in value:
+                if name == 'template':
                     return False
                 elif name in dbcache.field_metadata.all_field_keys():
                     fm = dbcache.field_metadata[name]

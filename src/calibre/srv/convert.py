@@ -127,7 +127,7 @@ def queue_job(ctx, rd, library_id, db, fmt, book_id, conversion_data):
     tdir = tempfile.mkdtemp(dir=rd.tdir)
     with tempfile.NamedTemporaryFile(prefix='', suffix=('.' + fmt.lower()), dir=tdir, delete=False) as src_file:
         db.copy_format_to(book_id, fmt, src_file)
-    with tempfile.NamedTemporaryFile(prefix='', suffix='.jpg', dir=tdir, delete=False) as cover_file:
+    with tempfile.NamedTemporaryFile(prefix='', suffix='.jpeg', dir=tdir, delete=False) as cover_file:
         cover_copied = db.copy_cover_to(book_id, cover_file)
     cover_path = cover_file.name if cover_copied else None
     mi = db.get_metadata(book_id)
@@ -205,10 +205,7 @@ def conversion_status(ctx, rd, job_id):
 
 def get_conversion_options(input_fmt, output_fmt, book_id, db):
     from calibre.customize.conversion import OptionRecommendation
-    from calibre.ebooks.conversion.config import (
-        OPTIONS, load_defaults, load_specifics, options_for_input_fmt,
-        options_for_output_fmt,
-    )
+    from calibre.ebooks.conversion.config import OPTIONS, load_defaults, load_specifics, options_for_input_fmt, options_for_output_fmt
     from calibre.ebooks.conversion.plumber import create_dummy_plumber
     plumber = create_dummy_plumber(input_fmt, output_fmt)
     specifics = load_specifics(db, book_id)
@@ -268,9 +265,7 @@ def profiles():
 
 @endpoint('/conversion/book-data/{book_id}', postprocess=json, types={'book_id': int})
 def conversion_data(ctx, rd, book_id):
-    from calibre.ebooks.conversion.config import (
-        NoSupportedInputFormats, get_input_format_for_book, get_sorted_output_formats,
-    )
+    from calibre.ebooks.conversion.config import NoSupportedInputFormats, get_input_format_for_book, get_sorted_output_formats
     db = get_library_data(ctx, rd)[0]
     if not ctx.has_id(rd, db, book_id):
         raise BookNotFound(book_id, db)

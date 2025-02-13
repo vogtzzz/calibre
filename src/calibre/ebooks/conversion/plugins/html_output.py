@@ -5,7 +5,8 @@ __docformat__ = 'restructuredtext en'
 import os
 import re
 import shutil
-from os.path import abspath, basename, dirname, exists, relpath as _relpath
+from os.path import abspath, basename, dirname, exists
+from os.path import relpath as _relpath
 
 from calibre import CurrentDir
 from calibre.customize.conversion import OptionRecommendation, OutputFormatPlugin
@@ -85,11 +86,11 @@ class HTMLOutput(OutputFormatPlugin):
 
     def convert(self, oeb_book, output_path, input_plugin, opts, log):
         from lxml import etree
+        from templite import Templite
 
         from calibre.ebooks.html.meta import EasyMeta
         from calibre.utils import zipfile
         from polyglot.urllib import unquote
-        from templite import Templite
 
         # read template files
         if opts.template_html_index is not None:
@@ -212,7 +213,7 @@ class HTMLOutput(OutputFormatPlugin):
                     f.write(t.encode('utf-8'))
                 item.unload_data_from_memory(memory=path)
 
-        zfile = zipfile.ZipFile(output_path, "w")
+        zfile = zipfile.ZipFile(output_path, 'w')
         zfile.add_dir(output_dir, basename(output_dir))
         zfile.write(output_file, basename(output_file), zipfile.ZIP_DEFLATED)
 

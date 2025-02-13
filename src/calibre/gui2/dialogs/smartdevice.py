@@ -3,7 +3,7 @@
 __license__   = 'GPL v3'
 __copyright__ = '2008, Kovid Goyal <kovid at kovidgoyal.net>'
 
-from qt.core import (QDialog, QLineEdit, Qt)
+from qt.core import QDialog, QLineEdit, Qt
 
 from calibre.gui2 import error_dialog
 from calibre.gui2.dialogs.smartdevice_ui import Ui_Dialog
@@ -19,7 +19,7 @@ def ipaddr_sort_key(ipaddr):
 
 
 def get_all_ip_addresses():
-    ipaddrs = list()
+    ipaddrs = []
     for iface in itervalues(get_all_ips()):
         for addrs in iface:
             if 'broadcast' in addrs and addrs['addr'] != '127.0.0.1':

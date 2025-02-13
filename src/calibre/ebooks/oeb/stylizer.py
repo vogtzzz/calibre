@@ -11,25 +11,23 @@ import numbers
 import os
 import re
 import unicodedata
-from css_parser import (
-    CSSParser, log as css_parser_log, parseString, parseStyle, profile as cssprofiles,
-    profiles, replaceUrls,
-)
-from css_parser.css import CSSFontFaceRule, CSSPageRule, CSSStyleRule, cssproperties
 from operator import itemgetter
 from weakref import WeakKeyDictionary
 from xml.dom import SyntaxErr as CSSSyntaxError
 
+from css_parser import CSSParser, parseString, parseStyle, profiles, replaceUrls
+from css_parser import log as css_parser_log
+from css_parser import profile as cssprofiles
+from css_parser.css import CSSFontFaceRule, CSSPageRule, CSSStyleRule, cssproperties
+from css_selectors import INAPPROPRIATE_PSEUDO_CLASSES, Select, SelectorError
+from tinycss.media3 import CSSMedia3Parser
+
 from calibre import as_unicode, force_unicode
 from calibre.ebooks import unit_convert
-from calibre.ebooks.oeb.base import (
-    CSS_MIME, OEB_STYLES, XHTML, XHTML_NS, urlnormalize, xpath,
-)
+from calibre.ebooks.oeb.base import CSS_MIME, OEB_STYLES, SVG, XHTML, XHTML_NS, urlnormalize, xpath
 from calibre.ebooks.oeb.normalize_css import DEFAULTS, normalizers
 from calibre.utils.resources import get_path as P
-from css_selectors import INAPPROPRIATE_PSEUDO_CLASSES, Select, SelectorError
 from polyglot.builtins import iteritems
-from tinycss.media3 import CSSMedia3Parser
 
 css_parser_log.setLevel(logging.WARN)
 
@@ -68,7 +66,7 @@ FONT_SIZE_NAMES = {
 }
 
 ALLOWED_MEDIA_TYPES = frozenset({'screen', 'all', 'aural', 'amzn-kf8'})
-IGNORED_MEDIA_FEATURES = frozenset('width min-width max-width height min-height max-height device-width min-device-width max-device-width device-height min-device-height max-device-height aspect-ratio min-aspect-ratio max-aspect-ratio device-aspect-ratio min-device-aspect-ratio max-device-aspect-ratio color min-color max-color color-index min-color-index max-color-index monochrome min-monochrome max-monochrome -webkit-min-device-pixel-ratio resolution min-resolution max-resolution scan grid'.split())  # noqa
+IGNORED_MEDIA_FEATURES = frozenset('width min-width max-width height min-height max-height device-width min-device-width max-device-width device-height min-device-height max-device-height aspect-ratio min-aspect-ratio max-aspect-ratio device-aspect-ratio min-device-aspect-ratio max-device-aspect-ratio color min-color max-color color-index min-color-index max-color-index monochrome min-monochrome max-monochrome -webkit-min-device-pixel-ratio resolution min-resolution max-resolution scan grid'.split())  # noqa: E501
 
 
 def media_ok(raw):
@@ -88,7 +86,7 @@ def media_ok(raw):
         return mq.negated ^ matched
 
     try:
-        for mq in CSSMedia3Parser().parse_stylesheet('@media %s {}' % raw).rules[0].media:
+        for mq in CSSMedia3Parser().parse_stylesheet(f'@media {raw} {{}}').rules[0].media:
             if query_ok(mq):
                 return True
         return False
@@ -186,7 +184,7 @@ class StylizerRules:
             if size == 'smallest':
                 size = 'xx-small'
             if size in FONT_SIZE_NAMES:
-                style['font-size'] = "%.1frem" % (self.profile.fnames[size] / float(self.profile.fbase))
+                style['font-size'] = f'{self.profile.fnames[size]/float(self.profile.fbase):.1f}rem'
         if '-epub-writing-mode' in style:
             for x in ('-webkit-writing-mode', 'writing-mode'):
                 style[x] = style.get(x, style['-epub-writing-mode'])
@@ -249,7 +247,7 @@ class Stylizer:
         parser = CSSParser(fetcher=self._fetch_css_file,
                 log=logging.getLogger('calibre.css'))
         for elem in style_tags:
-            if (elem.tag == XHTML('style') and elem.get('type', CSS_MIME) in OEB_STYLES and media_ok(elem.get('media'))):
+            if (elem.tag in (XHTML('style'), SVG('style')) and elem.get('type', CSS_MIME) in OEB_STYLES and media_ok(elem.get('media'))):
                 text = elem.text if elem.text else ''
                 for x in elem:
                     t = getattr(x, 'text', None)
@@ -276,7 +274,7 @@ class Stylizer:
                                 continue
                             sitem = hrefs[ihref]
                             if sitem.media_type not in OEB_STYLES:
-                                self.logger.warn('CSS @import of non-CSS file %r' % rule.href)
+                                self.logger.warn(f'CSS @import of non-CSS file {rule.href!r}')
                                 continue
                             stylesheets.append(sitem.data)
                     # Make links to resources absolute, since these rules will
@@ -293,13 +291,11 @@ class Stylizer:
                 sitem = oeb.manifest.hrefs.get(path, None)
                 if sitem is None:
                     self.logger.warn(
-                        'Stylesheet %r referenced by file %r not in manifest' %
-                        (path, item.href))
+                        f'Stylesheet {path!r} referenced by file {item.href!r} not in manifest')
                     continue
                 if not hasattr(sitem.data, 'cssRules'):
                     self.logger.warn(
-                    'Stylesheet %r referenced by file %r is not CSS'%(path,
-                        item.href))
+                    f'Stylesheet {path!r} referenced by file {item.href!r} is not CSS')
                     continue
                 stylesheets.append(sitem.data)
         csses = {'extra_css':extra_css, 'user_css':user_css}
@@ -311,7 +307,7 @@ class Stylizer:
                             validate=False)
                     stylesheets.append(stylesheet)
                 except Exception:
-                    self.logger.exception('Failed to parse %s, ignoring.'%w)
+                    self.logger.exception(f'Failed to parse {w}, ignoring.')
                     self.logger.debug('Bad css: ')
                     self.logger.debug(x)
 
@@ -326,7 +322,7 @@ class Stylizer:
         self.flatten_style = self.oeb.stylizer_rules.flatten_style
 
         self._styles = {}
-        pseudo_pat = re.compile(':{1,2}(%s)' % ('|'.join(INAPPROPRIATE_PSEUDO_CLASSES)), re.I)
+        pseudo_pat = re.compile(':{{1,2}}({})'.format('|'.join(INAPPROPRIATE_PSEUDO_CLASSES)), re.I)
         select = Select(tree, ignore_inappropriate_pseudo_classes=True)
 
         for _, _, cssdict, text, _ in self.rules:
@@ -356,7 +352,7 @@ class Stylizer:
 
                                 special_text = ''.join(punctuation_chars) + \
                                         (text[0] if text else '')
-                                span = x.makeelement('{%s}span' % XHTML_NS)
+                                span = x.makeelement(f'{{{XHTML_NS}}}span')
                                 span.text = special_text
                                 span.set('data-fake-first-letter', '1')
                                 span.tail = text[1:]
@@ -397,16 +393,16 @@ class Stylizer:
     def _fetch_css_file(self, path):
         hrefs = self.oeb.manifest.hrefs
         if path not in hrefs:
-            self.logger.warn('CSS import of missing file %r' % path)
-            return (None, None)
+            self.logger.warn(f'CSS import of missing file {path!r}')
+            return None, None
         item = hrefs[path]
         if item.media_type not in OEB_STYLES:
-            self.logger.warn('CSS import of non-CSS file %r' % path)
-            return (None, None)
+            self.logger.warn(f'CSS import of non-CSS file {path!r}')
+            return None, None
         data = item.data.cssText
         if not isinstance(data, bytes):
             data = data.encode('utf-8')
-        return ('utf-8', data)
+        return 'utf-8', data
 
     def style(self, element):
         try:
@@ -423,17 +419,31 @@ class Stylizer:
                     style['font-size'].endswith('pt'):
                 style = copy.copy(style)
                 size = float(style['font-size'][:-2])
-                style['font-size'] = "%.2fpt" % (size * font_scale)
+                style['font-size'] = f'{size*font_scale:.2f}pt'
             style = ';\n    '.join(': '.join(item) for item in style.items())
             rules.append(f'{selector} {{\n    {style};\n}}')
         return '\n'.join(rules)
 
 
 no_important_properties = frozenset()
+svg_text_tags = tuple(map(SVG, ('text', 'textPath', 'tref', 'tspan')))
+
+
+def is_only_number(x: str) -> bool:
+    try:
+        float(x)
+        return True
+    except Exception:
+        return False
+
+
+def is_svg_text_tag(x):
+    return getattr(x, 'tag', '') in svg_text_tags
 
 
 class Style:
     MS_PAT = re.compile(r'^\s*(mso-|panose-|text-underline|tab-interval)')
+    viewport_relative_font_size: str = ''
 
     def __init__(self, element, stylizer):
         self._element = element
@@ -617,7 +627,7 @@ class Style:
                 if not isinstance(result, numbers.Number):
                     return base
                 if result < 0:
-                    result = normalize_fontsize("smaller", base)
+                    result = normalize_fontsize('smaller', base)
             if factor:
                 result = factor * base
             return result
@@ -630,6 +640,8 @@ class Style:
                 base = self._profile.fbase
             if 'font-size' in self._style:
                 size = self._style['font-size']
+                if is_svg_text_tag(self._element) and (size.endswith('px') or is_only_number(size)):
+                    self.viewport_relative_font_size = size
                 result = normalize_fontsize(size, base)
             else:
                 result = base
@@ -841,7 +853,7 @@ class Style:
 
     def __str__(self):
         items = sorted(iteritems(self._style))
-        return '; '.join(f"{key}: {val}" for key, val in items)
+        return '; '.join(f'{key}: {val}' for key, val in items)
 
     def cssdict(self):
         return dict(self._style)

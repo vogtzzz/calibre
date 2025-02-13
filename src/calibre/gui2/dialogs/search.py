@@ -4,10 +4,27 @@ __copyright__ = '2008, Kovid Goyal <kovid at kovidgoyal.net>'
 import copy
 import re
 from datetime import date
+
 from qt.core import (
-    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QFrame, QGroupBox, QHBoxLayout,
-    QIcon, QLabel, QLineEdit, QPushButton, QRadioButton, QSize, QSpinBox, Qt,
-    QTabWidget, QToolButton, QVBoxLayout, QWidget,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QRadioButton,
+    QSize,
+    QSpinBox,
+    Qt,
+    QTabWidget,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from calibre import strftime
@@ -48,9 +65,9 @@ def create_msg_label(self):
     f.setFrameShadow(QFrame.Shadow.Raised)
     f.l = l = QVBoxLayout(f)
     f.um_label = la = QLabel(_(
-        "<p>You can also perform other kinds of advanced searches, for example checking"
+        '<p>You can also perform other kinds of advanced searches, for example checking'
         ' for books that have no covers, combining multiple search expression using Boolean'
-        ' operators and so on. See <a href=\"%s\">The search interface</a> for more information.'
+        ' operators and so on. See <a href="%s">The search interface</a> for more information.'
     ) % localize_user_manual_link('https://manual.calibre-ebook.com/gui.html#the-search-interface'))
     la.setMinimumSize(QSize(150, 0))
     la.setWordWrap(True)
@@ -60,13 +77,13 @@ def create_msg_label(self):
 
 
 def create_match_kind(self):
-    self.cmk_label = la = QLabel(_("What &kind of match to use:"))
+    self.cmk_label = la = QLabel(_('What &kind of match to use:'))
     self.matchkind = m = QComboBox(self)
     la.setBuddy(m)
     m.addItems([
-        _("Contains: the word or phrase matches anywhere in the metadata field"),
-        _("Equals: the word or phrase must match the entire metadata field"),
-        _("Regular expression: the expression must match anywhere in the metadata field"),
+        _('Contains: the word or phrase matches anywhere in the metadata field'),
+        _('Equals: the word or phrase must match the entire metadata field'),
+        _('Regular expression: the expression must match anywhere in the metadata field'),
         _("Character variant: 'contains' with accents ignored and punctuation significant")
     ])
     l = QHBoxLayout()
@@ -85,9 +102,9 @@ def create_button_box(self):
 
 def create_adv_tab(self):
     self.adv_tab = w = QWidget(self.tab_widget)
-    self.tab_widget.addTab(w, _("A&dvanced search"))
+    self.tab_widget.addTab(w, _('A&dvanced search'))
 
-    w.g1 = QGroupBox(_("Find entries that have..."), w)
+    w.g1 = QGroupBox(_('Find entries that have...'), w)
     w.g2 = QGroupBox(_("But don't show entries that have..."), w)
     w.l = l = QVBoxLayout(w)
     l.addWidget(w.g1), l.addWidget(w.g2), l.addStretch(10)
@@ -95,9 +112,9 @@ def create_adv_tab(self):
     w.g1.l = l = QFormLayout(w.g1)
     l.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
     for key, text in (
-            ('all', _("A&ll these words:")),
-            ('phrase', _("&This exact phrase:")),
-            ('any', _("O&ne or more of these words:")),
+            ('all', _('A&ll these words:')),
+            ('phrase', _('&This exact phrase:')),
+            ('any', _('O&ne or more of these words:')),
     ):
         le = QLineEdit(w)
         le.setClearButtonEnabled(True)
@@ -108,12 +125,12 @@ def create_adv_tab(self):
     l.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
     self.none = le = QLineEdit(w)
     le.setClearButtonEnabled(True)
-    l.addRow(_("Any of these &unwanted words:"), le)
+    l.addRow(_('Any of these &unwanted words:'), le)
 
 
 def create_simple_tab(self, db):
     self.simple_tab = w = QWidget(self.tab_widget)
-    self.tab_widget.addTab(w, _("Titl&e/author/series..."))
+    self.tab_widget.addTab(w, _('Titl&e/author/series...'))
 
     w.l = l = QFormLayout(w)
     l.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
@@ -181,7 +198,7 @@ def toggle_date_conditions_visibility(self):
 def create_date_tab(self, db):
     self.date_tab = w = QWidget(self.tab_widget)
     w.date_condition_layouts = dcl = []
-    self.tab_widget.addTab(w, _("&Date search"))
+    self.tab_widget.addTab(w, _('&Date search'))
     w.l = l = QVBoxLayout(w)
 
     def a(w):
@@ -196,7 +213,7 @@ def create_date_tab(self, db):
 
     w.h1 = h = QHBoxLayout()
     l.addLayout(h)
-    self.date_field = df = add(_("&Search the"), QComboBox(w))
+    self.date_field = df = add(_('&Search the'), QComboBox(w))
     vals = [((v['search_terms'] or [k])[0], v['name'] or k)
                 for k, v in db.field_metadata.iter_items()
                     if v.get('datatype', None) == 'datetime' or
@@ -205,7 +222,7 @@ def create_date_tab(self, db):
     for k, v in sorted(vals, key=lambda k_v: sort_key(k_v[1])):
         df.addItem(v, k)
     h.addWidget(df)
-    self.dateop_date = dd = add(_("date column for books whose &date is "), QComboBox(w))
+    self.dateop_date = dd = add(_('date column for books whose &date is '), QComboBox(w))
     init_dateop(dd)
     connect_lambda(dd.currentIndexChanged, self, toggle_date_conditions_visibility)
     w.la3 = la = QLabel('...')
@@ -259,7 +276,7 @@ def create_date_tab(self, db):
 
 def create_template_tab(self):
     self.simple_tab = w = QWidget(self.tab_widget)
-    self.tab_widget.addTab(w, _("&Template search"))
+    self.tab_widget.addTab(w, _('&Template search'))
 
     w.l = l = QFormLayout(w)
     l.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
@@ -273,9 +290,10 @@ def create_template_tab(self):
                     "in the calibre documentation. For example, with Number "
                     "comparisons you can use the relational operators like '>=' etc. "
                     "With Text comparisons you can use contains (T), exact (=T), "
-                    "or regular expression matches (~T). With Date you can use "
-                    "today, yesterday, etc. Set/not set takes 'true' for set "
-                    "and 'false' for not set.") + '</p>')
+                    "or regular expression matches (~T), where T is your text. "
+                    "With Date you can use 'today', 'yesterday', etc. When checking for "
+                    "Set use 'true' or 'yes'. When checking for Not set use 'false' "
+                    "or 'no'") + '</p>')
     l.addRow(_('Template &value:'), le)
 
     self.template_test_type_box = le = QComboBox(w)
@@ -293,11 +311,19 @@ def create_template_tab(self):
     self.template_program_box = le = TemplateLineEditor(self.tab_widget)
     le.setObjectName('template_program_box')
     le.setPlaceholderText(_('The template that generates the value'))
-    le.setToolTip(_('Right click to open a template editor'))
+    le.setToolTip('<p>' +
+                  _('Right click to open a template editor. <br>'
+                    'Technical note: the set of book ids already matched by '
+                    'previous search terms in the search expression is passed '
+                    'to the template in the global variables dictionary with the '
+                    'key "{0}". You can use the set to limit any work the '
+                    'template does to the set of books already matched, possibly '
+                    'improving performance.'
+                    ).format('_candidates')  + '</p>')
     lo = QHBoxLayout()
     lo.addWidget(le)
     self.edit_template_button = tb = QToolButton()
-    tb.setIcon(QIcon.ic("edit_input.png"))
+    tb.setIcon(QIcon.ic('edit_input.png'))
     tb.setToolTip(_('Open template editor'))
     lo.addWidget(tb)
     self.template_layout_label = tll = QLabel(_('&Template:'))
@@ -311,7 +337,7 @@ def create_template_tab(self):
 
 
 def setup_ui(self, db):
-    self.setWindowTitle(_("Advanced search"))
+    self.setWindowTitle(_('Advanced search'))
     self.setWindowIcon(QIcon.ic('search.png'))
     self.l = l = QVBoxLayout(self)
     self.h = h = QHBoxLayout()
@@ -376,14 +402,14 @@ class SearchDialog(QDialog):
         else:
             self.copy_current_template_search_button.setEnabled(False)
         self.copy_current_template_search_button.clicked.connect(self.retrieve_template_search)
-        self.edit_template_button.clicked.connect(lambda:self.template_program_box.open_editor())
+        self.edit_template_button.clicked.connect(lambda: self.template_program_box.open_editor())
         self.resize(self.sizeHint())
 
     def retrieve_template_search(self):
-        template, sep, query = re.split('#@#:([tdnb]):', self.current_search_text, flags=re.IGNORECASE)
+        template, sep, query = re.split(r'#@#:([tdnb]):', self.current_search_text, flags=re.IGNORECASE)
         self.template_value_box.setText(query)
         cb = self.template_test_type_box
-        for idx in range(0, cb.count()):
+        for idx in range(cb.count()):
             if sep == str(cb.itemData(idx)):
                 cb.setCurrentIndex(idx)
                 break
@@ -443,7 +469,7 @@ class SearchDialog(QDialog):
         template = str(self.template_program_box.text())
         value = str(self.template_value_box.text())
         cb = self.template_test_type_box
-        op =  str(cb.itemData(cb.currentIndex()))
+        op = str(cb.itemData(cb.currentIndex()))
         l = f'{template}#@#:{op}:{value}'
         # Use docstring quoting (super-quoting) to avoid problems with escaping
         return 'template:"""' + l + '"""'
@@ -458,10 +484,10 @@ class SearchDialog(QDialog):
             ans = f'{prefix}{self.date_year.value()}'
             m = self.date_month.itemData(self.date_month.currentIndex())
             if m > 0:
-                ans += '-%s' % m
+                ans += f'-{m}'
                 d = self.date_day.value()
                 if d > 0:
-                    ans += '-%s' % d
+                    ans += f'-{d}'
             return ans
         if self.sel_daysago.isChecked():
             val = self.date_daysago.value()
@@ -479,8 +505,7 @@ class SearchDialog(QDialog):
             self.mc = '~'
         else:
             self.mc = '^'
-        all, any, phrase, none = map(lambda x: str(x.text()),
-                (self.all, self.any, self.phrase, self.none))
+        all, any, phrase, none = (str(x.text()) for x in (self.all, self.any, self.phrase, self.none))
         all, any, none = map(self.tokens, (all, any, none))
         phrase = phrase.strip()
         all = ' and '.join(all)
@@ -488,7 +513,7 @@ class SearchDialog(QDialog):
         none = ' and not '.join(none)
         ans = ''
         if phrase:
-            ans += '"%s"'%phrase
+            ans += f'"{phrase}"'
         if all:
             ans += (' and ' if ans else '') + all
         if none:
@@ -507,7 +532,7 @@ class SearchDialog(QDialog):
                 txt = '!'+txt
             tok = self.FIELDS[str(self.field.currentText())]+txt
             if re.search(r'\s', tok):
-                tok = '"%s"'%tok
+                tok = f'"{tok}"'
             return tok
 
     def box_search_string(self):

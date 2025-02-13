@@ -4,11 +4,32 @@
 
 import textwrap
 from collections import OrderedDict
+
 from qt.core import (
-    QAbstractItemView, QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QIcon,
-    QInputDialog, QItemSelectionModel, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QMenu, QPalette, QPushButton, QSize, QStaticText, QStyle, QStyledItemDelegate, Qt,
-    QToolButton, QVBoxLayout, QWidget, pyqtSignal,
+    QAbstractItemView,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QIcon,
+    QInputDialog,
+    QItemSelectionModel,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
+    QPalette,
+    QPushButton,
+    QSize,
+    QStaticText,
+    QStyle,
+    QStyledItemDelegate,
+    Qt,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
 )
 
 from calibre.ebooks.metadata.tag_mapper import compile_pat, map_tags
@@ -240,9 +261,9 @@ class RuleItem(QListWidgetItem):
             '<b>{action}</b> the tag, if it <i>{match_type}</i>: <b>{query}</b>').format(
                 action=RuleEdit.ACTION_MAP[rule['action']], match_type=RuleEdit.MATCH_TYPE_MAP[rule['match_type']], query=query)
         if rule['action'] == 'replace':
-            text += '<br>' + _('with the tag:') + ' <b>%s</b>' % rule['replace']
+            text += '<br>' + _('with the tag:') + ' <b>{}</b>'.format(rule['replace'])
         if rule['action'] == 'split':
-            text += '<br>' + _('on the character:') + ' <b>%s</b>' % rule['replace']
+            text += '<br>' + _('on the character:') + ' <b>{}</b>'.format(rule['replace'])
         return '<div style="white-space: nowrap">' + text + '</div>'
 
     def __init__(self, rule, parent):
@@ -446,6 +467,9 @@ class Tester(Dialog):
 
 class SaveLoadMixin:
 
+    ruleset_changed = pyqtSignal()
+    base_window_title = ''
+
     def save_ruleset(self):
         if not self.rules:
             error_dialog(self, _('No rules'), _(
@@ -462,8 +486,13 @@ class SaveLoadMixin:
             rules = self.rules
             if rules:
                 self.PREFS_OBJECT[text] = self.rules
-            elif text in self.PREFS_OBJECT:
+                self.loaded_ruleset = text
+                self.ruleset_changed.emit()
+            elif text in self.PREFS_OBJECT:  # Don't think we can get here because 'if rules:' is always True
                 del self.PREFS_OBJECT[text]
+                if self.loaded_ruleset == text:
+                    self.loaded_ruleset = ''
+                    self.ruleset_changed.emit()
             self.build_load_menu()
 
     def build_load_menu(self):
@@ -485,9 +514,13 @@ class SaveLoadMixin:
     def load_ruleset(self, name):
         self.rules = self.PREFS_OBJECT[name]
         self.loaded_ruleset = name
+        self.ruleset_changed.emit()
 
     def delete_ruleset(self, name):
         del self.PREFS_OBJECT[name]
+        if self.loaded_ruleset == name:
+            self.loaded_ruleset = ''
+            self.ruleset_changed.emit()
         self.build_load_menu()
 
 
@@ -524,6 +557,18 @@ class RulesDialog(Dialog, SaveLoadMixin):
         self.build_load_menu()
         self.test_button = b = self.bb.addButton(_('&Test rules'), QDialogButtonBox.ButtonRole.ActionRole)
         b.clicked.connect(self.test_rules)
+        self.ruleset_changed.connect(self.update_title_bar)
+
+    def update_title_bar(self):
+        if self.base_window_title:
+            if self.loaded_ruleset:
+                self.setWindowTitle(_('{base} - (ruleset: {name})').format(base=self.base_window_title, name=self.loaded_ruleset))
+            else:
+                self.setWindowTitle(self.base_window_title)
+
+    def exec(self):
+        self.base_window_title = self.windowTitle()
+        return super().exec()
 
     def extra_bottom_widget(self):
         pass

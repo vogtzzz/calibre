@@ -7,27 +7,19 @@ import re
 from collections import defaultdict, namedtuple
 from contextlib import suppress
 from functools import wraps
-from lxml import etree
 from operator import attrgetter
 
+from lxml import etree
+
 from calibre import prints
-from calibre.ebooks.metadata import (
-    authors_to_string, check_isbn, fmt_sidx, string_to_authors
-)
+from calibre.ebooks.metadata import authors_to_string, check_isbn, fmt_sidx, string_to_authors
 from calibre.ebooks.metadata.book.base import Metadata
-from calibre.ebooks.metadata.book.json_codec import (
-    decode_is_multiple, encode_is_multiple, object_to_unicode
-)
-from calibre.ebooks.metadata.utils import (
-    create_manifest_item, ensure_unique, normalize_languages, parse_opf,
-    pretty_print_opf
-)
+from calibre.ebooks.metadata.book.json_codec import decode_is_multiple, encode_is_multiple, object_to_unicode
+from calibre.ebooks.metadata.utils import create_manifest_item, ensure_unique, normalize_languages, parse_opf, pretty_print_opf
 from calibre.ebooks.oeb.base import DC, OPF, OPF2_NSMAP
 from calibre.utils.config import from_json, to_json
-from calibre.utils.date import (
-    fix_only_date, is_date_undefined, isoformat, parse_date as parse_date_, utcnow,
-    w3cdtf
-)
+from calibre.utils.date import fix_only_date, is_date_undefined, isoformat, utcnow, w3cdtf
+from calibre.utils.date import parse_date as parse_date_
 from calibre.utils.iso8601 import parse_iso8601
 from calibre.utils.localization import canonicalize_lang
 from polyglot.builtins import iteritems
@@ -42,7 +34,7 @@ def uniq(vals):
     vals = vals or ()
     seen = set()
     seen_add = seen.add
-    return list(x for x in vals if x not in seen and not seen_add(x))
+    return [x for x in vals if x not in seen and not seen_add(x)]
 
 
 def dump_dict(cats):
@@ -143,7 +135,7 @@ def items_with_property(root, q, prefixes=None):
     if prefixes is None:
         prefixes = read_prefixes(root)
     q = expand_prefix(q, known_prefixes).lower()
-    for item in XPath("./opf:manifest/opf:item[@properties]")(root):
+    for item in XPath('./opf:manifest/opf:item[@properties]')(root):
         for prop in (item.get('properties') or '').lower().split():
             prop = expand_prefix(prop, prefixes)
             if prop == q:
@@ -199,8 +191,8 @@ def ensure_prefix(root, prefixes, prefix, value=None):
 
 # }}}
 
-# Refines {{{
 
+# Refines {{{
 
 def read_refines(root):
     ans = defaultdict(list)
@@ -212,7 +204,7 @@ def read_refines(root):
 
 
 def refdef(prop, val, scheme=None):
-    return (prop, val, scheme)
+    return prop, val, scheme
 
 
 def set_refines(elem, existing_refines, *new_refines):
@@ -229,8 +221,8 @@ def set_refines(elem, existing_refines, *new_refines):
         p.insert(p.index(elem)+1, r)
 # }}}
 
-# Identifiers {{{
 
+# Identifiers {{{
 
 def parse_identifier(ident, val, refines):
     idid = ident.get('id')
@@ -338,8 +330,8 @@ set_uuid = identifier_writer('uuid')
 
 # }}}
 
-# Title {{{
 
+# Title {{{
 
 def find_main_title(root, refines, remove_blanks=False):
     first_title = main_title = None
@@ -412,8 +404,8 @@ def set_title(root, prefixes, refines, title, title_sort=None):
 
 # }}}
 
-# Languages {{{
 
+# Languages {{{
 
 def read_languages(root, prefixes, refines):
     ans = []
@@ -442,8 +434,8 @@ def set_languages(root, prefixes, refines, languages):
         metadata.append(l)
 # }}}
 
-# Creator/Contributor {{{
 
+# Creator/Contributor {{{
 
 Author = namedtuple('Author', 'name sort seq', defaults=(0,))
 
@@ -566,8 +558,8 @@ def set_book_producers(root, prefixes, refines, producers):
             metadata.append(m)
 # }}}
 
-# Dates {{{
 
+# Dates {{{
 
 def parse_date(raw, is_w3cdtf=False):
     raw = raw.strip()
@@ -604,8 +596,8 @@ def set_pubdate(root, prefixes, refines, val):
 
 
 def read_timestamp(root, prefixes, refines):
-    pq = '%s:timestamp' % CALIBRE_PREFIX
-    sq = '%s:w3cdtf' % reserved_prefixes['dcterms']
+    pq = f'{CALIBRE_PREFIX}:timestamp'
+    sq = '{}:w3cdtf'.format(reserved_prefixes['dcterms'])
     for meta in XPath('./opf:metadata/opf:meta[@property]')(root):
         val = (meta.text or '').strip()
         if val:
@@ -636,7 +628,7 @@ def create_timestamp(root, prefixes, m, val):
 
 
 def set_timestamp(root, prefixes, refines, val):
-    pq = '%s:timestamp' % CALIBRE_PREFIX
+    pq = f'{CALIBRE_PREFIX}:timestamp'
     for meta in XPath('./opf:metadata/opf:meta')(root):
         prop = expand_prefix(meta.get('property'), prefixes)
         if prop.lower() == pq or meta.get('name') == 'calibre:timestamp':
@@ -645,8 +637,8 @@ def set_timestamp(root, prefixes, refines, val):
 
 
 def read_last_modified(root, prefixes, refines):
-    pq = '%s:modified' % reserved_prefixes['dcterms']
-    sq = '%s:w3cdtf' % reserved_prefixes['dcterms']
+    pq = '{}:modified'.format(reserved_prefixes['dcterms'])
+    sq = '{}:w3cdtf'.format(reserved_prefixes['dcterms'])
     for meta in XPath('./opf:metadata/opf:meta[@property]')(root):
         val = (meta.text or '').strip()
         if val:
@@ -660,7 +652,7 @@ def read_last_modified(root, prefixes, refines):
 
 
 def set_last_modified(root, prefixes, refines, val=None):
-    pq = '%s:modified' % reserved_prefixes['dcterms']
+    pq = '{}:modified'.format(reserved_prefixes['dcterms'])
     val = w3cdtf(val or utcnow())
     for meta in XPath('./opf:metadata/opf:meta[@property]')(root):
         prop = expand_prefix(meta.get('property'), prefixes)
@@ -676,8 +668,8 @@ def set_last_modified(root, prefixes, refines, val=None):
     meta.text = val
 # }}}
 
-# Comments {{{
 
+# Comments {{{
 
 def read_comments(root, prefixes, refines):
     ans = ''
@@ -699,8 +691,8 @@ def set_comments(root, prefixes, refines, val):
             m.append(c)
 # }}}
 
-# Publisher {{{
 
+# Publisher {{{
 
 @simple_text
 def read_publisher(root, prefixes, refines):
@@ -721,8 +713,8 @@ def set_publisher(root, prefixes, refines, val):
             m.append(c)
 # }}}
 
-# Tags {{{
 
+# Tags {{{
 
 def read_tags(root, prefixes, refines):
     ans = []
@@ -745,11 +737,11 @@ def set_tags(root, prefixes, refines, val):
                 m.append(c)
 # }}}
 
+
 # Rating {{{
 
-
 def read_rating(root, prefixes, refines):
-    pq = '%s:rating' % CALIBRE_PREFIX
+    pq = f'{CALIBRE_PREFIX}:rating'
     for meta in XPath('./opf:metadata/opf:meta[@property]')(root):
         val = (meta.text or '').strip()
         if val:
@@ -777,7 +769,7 @@ def create_rating(root, prefixes, val):
 
 
 def set_rating(root, prefixes, refines, val):
-    pq = '%s:rating' % CALIBRE_PREFIX
+    pq = f'{CALIBRE_PREFIX}:rating'
     for meta in XPath('./opf:metadata/opf:meta[@name="calibre:rating"]')(root):
         remove_element(meta, refines)
     for meta in XPath('./opf:metadata/opf:meta[@property]')(root):
@@ -785,11 +777,11 @@ def set_rating(root, prefixes, refines, val):
         if prop.lower() == pq:
             remove_element(meta, refines)
     if val:
-        create_rating(root, prefixes, '%.2g' % float(val))
+        create_rating(root, prefixes, f'{float(val):.2g}')
 # }}}
 
-# Series {{{
 
+# Series {{{
 
 def read_series(root, prefixes, refines):
     series_index = 1.0
@@ -833,8 +825,8 @@ def set_series(root, prefixes, refines, series, series_index):
         create_series(root, refines, series, fmt_sidx(series_index))
 # }}}
 
-# User metadata {{{
 
+# User metadata {{{
 
 def dict_reader(name, load=json.loads, try2=True):
     pq = f'{CALIBRE_PREFIX}:{name}'
@@ -852,7 +844,7 @@ def dict_reader(name, load=json.loads, try2=True):
                     except Exception:
                         continue
         if try2:
-            for meta in XPath('./opf:metadata/opf:meta[@name="calibre:%s"]' % name)(root):
+            for meta in XPath(f'./opf:metadata/opf:meta[@name="calibre:{name}"]')(root):
                 val = meta.get('content')
                 if val:
                     try:
@@ -885,10 +877,10 @@ def dict_writer(name, serialize=dump_dict, remove2=True, extra_remove=''):
 
     def writer(root, prefixes, refines, val):
         if remove2:
-            for meta in XPath('./opf:metadata/opf:meta[@name="calibre:%s"]' % name)(root):
+            for meta in XPath(f'./opf:metadata/opf:meta[@name="calibre:{name}"]')(root):
                 remove_element(meta, refines)
         if extra_remove:
-            for meta in XPath('./opf:metadata/opf:meta[@name="calibre:%s"]' % extra_remove)(root):
+            for meta in XPath(f'./opf:metadata/opf:meta[@name="calibre:{extra_remove}"]')(root):
                 remove_element(meta, refines)
         for meta in XPath('./opf:metadata/opf:meta[@property]')(root):
             prop = expand_prefix(meta.get('property'), prefixes)
@@ -897,7 +889,7 @@ def dict_writer(name, serialize=dump_dict, remove2=True, extra_remove=''):
         if val:
             ensure_prefix(root, prefixes, 'calibre', CALIBRE_PREFIX)
             m = XPath('./opf:metadata')(root)[0]
-            d = m.makeelement(OPF('meta'), attrib={'property':'calibre:%s' % name})
+            d = m.makeelement(OPF('meta'), attrib={'property':f'calibre:{name}'})
             d.text = serialize(val)
             m.append(d)
     return writer
@@ -959,14 +951,17 @@ def set_user_metadata(root, prefixes, refines, val):
         nval = {}
         for name, fm in val.items():
             fm = fm.copy()
+            if (fm.get('datatype', 'text') == 'composite'
+              and not fm.get('display', {}).get('composite_store_template_value_in_opf', True)):
+                fm['#value#'] = ''
             encode_is_multiple(fm)
             nval[name] = fm
         set_user_metadata3(root, prefixes, refines, nval)
 
 # }}}
 
-# Covers {{{
 
+# Covers {{{
 
 def read_raster_cover(root, prefixes, refines):
 
@@ -1013,8 +1008,8 @@ def ensure_is_only_raster_cover(root, prefixes, refines, raster_cover_item_href)
 
 # }}}
 
-# Reading/setting Metadata objects {{{
 
+# Reading/setting Metadata objects {{{
 
 def first_spine_item(root, prefixes, refines):
     for i in XPath('./opf:spine/opf:itemref/@idref')(root):
@@ -1072,7 +1067,11 @@ def read_metadata(root, ver=None, return_extra_data=False):
     ans.link_maps = read_link_maps(root, prefixes, refines) or ans.link_maps
     ans.user_categories = read_user_categories(root, prefixes, refines) or ans.user_categories
     for name, fm in iteritems(read_user_metadata(root, prefixes, refines) or {}):
-        ans.set_user_metadata(name, fm)
+        try:
+            ans.set_user_metadata(name, fm)
+        except Exception:
+            import traceback
+            traceback.print_exc()
     if return_extra_data:
         ans = ans, ver, read_raster_cover(root, prefixes, refines), first_spine_item(root, prefixes, refines)
     return ans
@@ -1119,7 +1118,8 @@ def apply_metadata(root, mi, cover_prefix='', cover_data=None, apply_null=False,
     if ok('rating') and mi.rating is not None and float(mi.rating) > 0.1:
         set_rating(root, prefixes, refines, mi.rating)
     if ok('series'):
-        set_series(root, prefixes, refines, mi.series, mi.series_index or 1)
+        sidx = mi.series_index if isinstance(mi.series_index, (int, float)) else 1.0
+        set_series(root, prefixes, refines, mi.series, sidx)
     if ok('link_maps'):
         set_link_maps(root, prefixes, refines, getattr(mi, 'link_maps', None))
     if ok('user_categories'):

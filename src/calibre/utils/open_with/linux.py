@@ -4,11 +4,13 @@
 __license__ = 'GPL v3'
 __copyright__ = '2015, Kovid Goyal <kovid at kovidgoyal.net>'
 
-import re, shlex, os
+import os
+import re
+import shlex
 from collections import defaultdict
 
-from calibre import walk, guess_type, prints, force_unicode
-from calibre.constants import filesystem_encoding, cache_dir
+from calibre import force_unicode, guess_type, prints, walk
+from calibre.constants import cache_dir, filesystem_encoding
 from calibre.utils.icu import numeric_sort_key as sort_key
 from calibre.utils.localization import canonicalize_lang, get_lang
 from calibre.utils.serialize import msgpack_dumps, msgpack_loads
@@ -145,7 +147,7 @@ def find_icons():
                     try:
                         cache[d] = read_icon_theme_dir(d)
                     except Exception:
-                        prints('Failed to read icon theme dir: %r with error:' % d)
+                        prints(f'Failed to read icon theme dir: {d!r} with error:')
                         import traceback
                         traceback.print_exc()
                     mtimes[d] = mtime
@@ -226,7 +228,7 @@ def find_programs(extensions):
             continue
         if data is not None and mime_types.intersection(data['MimeType']):
             ans.append(process_desktop_file(data))
-    ans.sort(key=lambda d:sort_key(d.get('Name')))
+    ans.sort(key=lambda d: sort_key(d.get('Name')))
     return ans
 
 

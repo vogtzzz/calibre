@@ -4,14 +4,15 @@
 import json
 from xml.sax.saxutils import escape, quoteattr
 
-from calibre.web.feeds.news import BasicNewsRecipe, prefixed_classes as prefix_classes, classes
+from calibre.web.feeds.news import BasicNewsRecipe, classes
+from calibre.web.feeds.news import prefixed_classes as prefix_classes
 
 web_version = False
 test_article = None
 # test_article = 'https://www.theatlantic.com/health/archive/2020/12/covid-19-second-surge/617415/?utm_source=feed'
 
 
-# {{{ parse article JSON
+# parse article JSON {{{
 def process_image_block(lines, block):
     caption = block.get('captionText')
     caption_lines = []
@@ -79,6 +80,19 @@ class TheAtlantic(BasicNewsRecipe):
     __author__ = 'Kovid Goyal'
     language = 'en'
     encoding = 'utf-8'
+
+    recipe_specific_options = {
+        'date': {
+            'short': 'The date of the edition to download (YYYY/MM format)',
+            'long': 'For example, 2024/05'
+        }
+    }
+
+    def __init__(self, *args, **kwargs):
+        BasicNewsRecipe.__init__(self, *args, **kwargs)
+        d = self.recipe_specific_options.get('date')
+        if d and isinstance(d, str):
+            self.INDEX = 'https://www.theatlantic.com/magazine/toc/' + d + '/'
 
     keep_only_tags = [
         dict(itemprop=['headline']),
@@ -198,7 +212,9 @@ class TheAtlantic(BasicNewsRecipe):
                 self.cover_url = img['src']
             current_section, current_articles = 'Cover Story', []
             feeds = []
-            for x in soup.findAll(**prefix_classes('TocFeaturedSection_heading__ TocSection_heading__ TocHeroGridItem_hedLink___ TocGridItem_hedLink__')):
+            for x in soup.findAll(**prefix_classes(
+                'TocFeaturedSection_heading__ TocSection_heading__ TocHeroGridItem_hedLink__ TocGridItem_hedLink__ RiverGridItem_hedLink__'
+            )):
                 cls = x['class']
                 if not isinstance(cls, str):
                     cls = ' '.join(cls)

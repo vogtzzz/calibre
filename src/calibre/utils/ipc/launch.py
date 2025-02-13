@@ -4,14 +4,17 @@ __license__   = 'GPL v3'
 __copyright__ = '2009, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import subprocess, os, sys, time
+import os
+import subprocess
+import sys
+import time
 
-from calibre.constants import iswindows, ismacos, isfrozen
-from calibre.utils.config import prefs
+from calibre.constants import isfrozen, ismacos, iswindows
 from calibre.ptempfile import PersistentTemporaryFile, base_dir
+from calibre.utils.config import prefs
 from calibre.utils.serialize import msgpack_dumps
-from polyglot.builtins import string_or_bytes, environ_item, native_string_type
 from polyglot.binary import as_hex_unicode
+from polyglot.builtins import environ_item, native_string_type, string_or_bytes
 
 if iswindows:
     try:
@@ -52,7 +55,7 @@ def exe_path(exe_name):
     e = exe_name
     if iswindows:
         return os.path.join(os.path.dirname(sys.executable),
-                e+'.exe' if isfrozen else 'Scripts\\%s.exe'%e)
+                e+'.exe' if isfrozen else f'Scripts\\{e}.exe')
     if ismacos:
         return os.path.join(sys.executables_location, e)
 
@@ -171,20 +174,20 @@ class Worker:
             priority = prefs['worker_process_priority']
         cmd = [exe] if isinstance(exe, string_or_bytes) else exe
         args = {
-                'env' : env,
-                'cwd' : _cwd,
+                'env': env,
+                'cwd': _cwd,
                 }
         if iswindows:
             priority = {
-                    'high'   : subprocess.HIGH_PRIORITY_CLASS,
-                    'normal' : subprocess.NORMAL_PRIORITY_CLASS,
-                    'low'    : subprocess.IDLE_PRIORITY_CLASS}[priority]
+                    'high'  : subprocess.HIGH_PRIORITY_CLASS,
+                    'normal': subprocess.NORMAL_PRIORITY_CLASS,
+                    'low'   : subprocess.IDLE_PRIORITY_CLASS}[priority]
             args['creationflags'] = subprocess.CREATE_NO_WINDOW|priority
         else:
             niceness = {
-                    'normal' : 0,
-                    'low'    : 10,
-                    'high'   : 20,
+                    'normal': 0,
+                    'low'   : 10,
+                    'high'  : 20,
             }[priority]
             args['env']['CALIBRE_WORKER_NICENESS'] = str(niceness)
         ret = None

@@ -47,7 +47,7 @@ class PMLInput(InputFormatPlugin):
         self.log.debug('Converting PML to HTML...')
         hizer = PML_HTMLizer()
         html = hizer.parse_pml(pml_stream.read().decode(ienc), html_path)
-        html = '<html><head><title></title></head><body>%s</body></html>'%html
+        html = f'<html><head><title></title></head><body>{html}</body></html>'
         html_stream.write(html.encode('utf-8', 'replace'))
 
         if pclose:
@@ -85,8 +85,8 @@ class PMLInput(InputFormatPlugin):
 
     def convert(self, stream, options, file_ext, log,
                 accelerators):
-        from calibre.ebooks.metadata.toc import TOC
         from calibre.ebooks.metadata.opf2 import OPFCreator
+        from calibre.ebooks.metadata.toc import TOC
         from calibre.utils.zipfile import ZipFile
 
         self.options = options
@@ -106,7 +106,7 @@ class PMLInput(InputFormatPlugin):
                     html_path = os.path.join(os.getcwd(), html_name)
 
                     pages.append(html_name)
-                    log.debug('Processing PML item %s...' % pml)
+                    log.debug(f'Processing PML item {pml}...')
                     ttoc = self.process_pml(pml, html_path)
                     toc += ttoc
                 images = self.get_images(stream, tdir, True)

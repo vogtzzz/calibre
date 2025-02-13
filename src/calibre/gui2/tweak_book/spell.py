@@ -9,44 +9,74 @@ import sys
 from collections import OrderedDict, defaultdict
 from functools import partial
 from itertools import chain
-from qt.core import (
-    QT_VERSION_STR, QAbstractItemView, QAbstractTableModel, QAction, QApplication,
-    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFont, QFormLayout, QGridLayout,
-    QHBoxLayout, QIcon, QInputDialog, QKeySequence, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMenu, QModelIndex, QPlainTextEdit, QPushButton, QSize,
-    QStackedLayout, Qt, QTableView, QTabWidget, QTimer, QToolButton, QTreeWidget,
-    QTreeWidgetItem, QVBoxLayout, QWidget, pyqtSignal,
-)
 from threading import Thread
+
+import regex
+from qt.core import (
+    QT_VERSION_STR,
+    QAbstractItemView,
+    QAbstractTableModel,
+    QAction,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFont,
+    QFormLayout,
+    QGridLayout,
+    QHBoxLayout,
+    QIcon,
+    QInputDialog,
+    QKeySequence,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
+    QModelIndex,
+    QPlainTextEdit,
+    QPushButton,
+    QSize,
+    QStackedLayout,
+    Qt,
+    QTableView,
+    QTabWidget,
+    QTimer,
+    QToolButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
+)
 
 from calibre.constants import __appname__
 from calibre.ebooks.oeb.base import NCX_MIME, OEB_DOCS, OPF_MIME
-from calibre.ebooks.oeb.polish.spell import (
-    get_all_words, get_checkable_file_names, merge_locations, replace_word,
-    undo_replace_word,
-)
-from calibre.gui2 import choose_files, error_dialog
+from calibre.ebooks.oeb.polish.spell import get_all_words, get_checkable_file_names, merge_locations, replace_word, undo_replace_word
+from calibre.gui2 import choose_files, choose_save_file, error_dialog
 from calibre.gui2.complete2 import LineEdit
 from calibre.gui2.languages import LanguagesEdit
 from calibre.gui2.progress_indicator import ProgressIndicator
-from calibre.gui2.tweak_book import (
-    current_container, dictionaries, editors, set_book_locale, tprefs,
-)
+from calibre.gui2.tweak_book import current_container, dictionaries, editors, set_book_locale, tprefs
 from calibre.gui2.tweak_book.widgets import Dialog
 from calibre.gui2.widgets import BusyCursor
-from calibre.gui2.widgets2 import FlowLayout
 from calibre.spell import DictionaryLocale
 from calibre.spell.break_iterator import split_into_words
 from calibre.spell.dictionary import (
-    best_locale_for_language, builtin_dictionaries, catalog_online_dictionaries,
-    custom_dictionaries, dprefs, get_dictionary, remove_dictionary, rename_dictionary,
+    best_locale_for_language,
+    builtin_dictionaries,
+    catalog_online_dictionaries,
+    custom_dictionaries,
+    dprefs,
+    get_dictionary,
+    remove_dictionary,
+    rename_dictionary,
 )
 from calibre.spell.import_from import import_from_online, import_from_oxt
 from calibre.startup import connect_lambda
-from calibre.utils.icu import contains, primary_contains, primary_sort_key, sort_key
-from calibre.utils.localization import (
-    calibre_langcode_to_name, canonicalize_lang, get_lang, get_language,
-)
+from calibre.utils.icu import contains, primary_contains, primary_sort_key, sort_key, upper
+from calibre.utils.localization import calibre_langcode_to_name, canonicalize_lang, get_lang, get_language
 from calibre.utils.resources import get_path as P
 from calibre_extensions.progress_indicator import set_no_activate_on_click
 from polyglot.builtins import iteritems
@@ -65,13 +95,15 @@ def country_map():
         _country_map = msgpack_loads(P('localization/iso3166.calibre_msgpack', data=True, allow_user_override=False))
     return _country_map
 
+
 def current_languages_dictionaries(reread=False):
     all_dictionaries = builtin_dictionaries() | custom_dictionaries(reread=reread)
-    languages = defaultdict(lambda : defaultdict(set))
+    languages = defaultdict(lambda: defaultdict(set))
     for d in all_dictionaries:
         for locale in d.locales | {d.primary_locale}:
             languages[locale.langcode][locale.countrycode].add(d)
     return languages
+
 
 class AddDictionary(QDialog):  # {{{
 
@@ -137,7 +169,7 @@ class AddDictionary(QDialog):  # {{{
             download more dictionaries from <a href="{1}">the LibreOffice extensions repository</a>.
             The dictionary will download as an .oxt file. Simply specify the path to the
             downloaded .oxt file here to add the dictionary to {0}.''').format(
-                __appname__, 'https://extensions.libreoffice.org/?Tags%5B%5D=50')+'<p>')  # noqa
+                __appname__, 'https://extensions.libreoffice.org/?Tags%5B%5D=50')+'<p>')
         la.setWordWrap(True)
         la.setOpenExternalLinks(True)
         la.setMinimumWidth(450)
@@ -211,11 +243,11 @@ class AddDictionary(QDialog):  # {{{
         except:
             import traceback
             return error_dialog(self, _('Failed to download dictionaries'), _(
-                'Failed to download dictionaries for "{:s}". Click "Show details" for more information').format(data['text']),
+                'Failed to download dictionaries for "{}". Click "Show details" for more information').format(data['text']),
                                 det_msg=traceback.format_exc(), show=True)
         if num == 0:
             return error_dialog(self, _('No dictionaries'), _(
-                'No dictionary was found for "{:s}"').format(data['text']), show=True)
+                'No dictionary was found for "{}"').format(data['text']), show=True)
 
     def accept(self):
         idx = self.tabs.currentIndex()
@@ -227,8 +259,8 @@ class AddDictionary(QDialog):  # {{{
         QDialog.accept(self)
 # }}}
 
-# User Dictionaries {{{
 
+# User Dictionaries {{{
 
 class UserWordList(QListWidget):
 
@@ -325,7 +357,7 @@ class ManageUserDictionaries(Dialog):
 
     def build_dictionaries(self, current=None):
         self.dictionaries.clear()
-        for dic in sorted(dictionaries.all_user_dictionaries, key=lambda d:sort_key(d.name)):
+        for dic in sorted(dictionaries.all_user_dictionaries, key=lambda d: sort_key(d.name)):
             i = QListWidgetItem(dic.name, self.dictionaries)
             i.setData(Qt.ItemDataRole.UserRole, dic)
             if dic.is_active:
@@ -400,7 +432,7 @@ class ManageUserDictionaries(Dialog):
         self.is_active.setChecked(d.is_active)
         self.is_active.blockSignals(False)
         self.words.clear()
-        for word, lang in sorted(d.words, key=lambda x:sort_key(x[0])):
+        for word, lang in sorted(d.words, key=lambda x: sort_key(x[0])):
             i = QListWidgetItem(f'{word} [{get_language(lang)}]', self.words)
             i.setData(Qt.ItemDataRole.UserRole, (word, lang))
 
@@ -463,8 +495,8 @@ class ManageUserDictionaries(Dialog):
                 'You must specify a language to import words'), show=True)
         words = set(filter(None, [x.strip() for x in str(w.toPlainText()).splitlines()]))
         lang = lc[0]
-        words = {(w, lang) for w in words} - self.current_dictionary.words
-        if dictionaries.add_to_user_dictionary(self.current_dictionary.name, words, DictionaryLocale(lang, None)):
+        words_with_lang = {(w, lang) for w in words} - self.current_dictionary.words
+        if dictionaries.add_to_user_dictionary(self.current_dictionary.name, words_with_lang, DictionaryLocale(lang, None)):
             dictionaries.clear_caches()
             self.show_current_dictionary()
             self.dictionaries_changed = True
@@ -491,8 +523,8 @@ class ManageUserDictionaries(Dialog):
         d = cls()
         d.exec()
 
-
 # }}}
+
 
 class ManageDictionaries(Dialog):  # {{{
 
@@ -572,7 +604,7 @@ class ManageDictionaries(Dialog):  # {{{
         itf.setItalic(True)
         self.dictionaries.clear()
 
-        for lc in sorted(languages, key=lambda x:sort_key(calibre_langcode_to_name(x))):
+        for lc in sorted(languages, key=lambda x: sort_key(calibre_langcode_to_name(x))):
             i = QTreeWidgetItem(self.dictionaries, LANG)
             i.setText(0, calibre_langcode_to_name(lc))
             i.setData(0, Qt.ItemDataRole.UserRole, lc)
@@ -652,7 +684,7 @@ class ManageDictionaries(Dialog):  # {{{
             x.setData(0, Qt.ItemDataRole.FontRole, bf if x is item else None)
         lc = str(item.parent().data(0, Qt.ItemDataRole.UserRole))
         pl = dprefs['preferred_locales']
-        pl[lc] = f'{lc}-{str(item.data(0, Qt.ItemDataRole.UserRole))}'
+        pl[lc] = f'{lc}-{item.data(0, Qt.ItemDataRole.UserRole)}'
         dprefs['preferred_locales'] = pl
 
     def init_dictionary(self, item):
@@ -685,25 +717,41 @@ class ManageDictionaries(Dialog):  # {{{
         d.exec()
 # }}}
 
-# Spell Check Dialog {{{
 
+# Spell Check Dialog {{{
 
 class WordsModel(QAbstractTableModel):
 
     word_ignored = pyqtSignal(object, object)
     counts_changed = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, show_only_misspelt=True):
         QAbstractTableModel.__init__(self, parent)
         self.counts = (0, 0)
+        self.all_caps = self.with_numbers = self.camel_case = self.snake_case = False
         self.words = {}  # Map of (word, locale) to location data for the word
         self.spell_map = {}  # Map of (word, locale) to dictionaries.recognized(word, locale)
         self.sort_on = (0, False)
         self.items = []  # The currently displayed items
         self.filter_expression = None
-        self.show_only_misspelt = True
+        self.show_only_misspelt = show_only_misspelt
         self.headers = (_('Word'), _('Count'), _('Language'), _('Misspelled?'))
         self.alignments = Qt.AlignmentFlag.AlignLeft, Qt.AlignmentFlag.AlignRight, Qt.AlignmentFlag.AlignLeft, Qt.AlignmentFlag.AlignHCenter
+        self.num_pat = regex.compile(r'\d', flags=regex.UNICODE)
+        self.camel_case_pat = regex.compile(r'[a-z][A-Z]', flags=regex.UNICODE)
+        self.snake_case_pat = regex.compile(r'\w_\w', flags=regex.UNICODE)
+
+    def to_csv(self):
+        from csv import writer as csv_writer
+        from io import StringIO
+        buf = StringIO(newline='')
+        w = csv_writer(buf)
+        w.writerow(self.headers)
+        cols = self.columnCount()
+        for r in range(self.rowCount()):
+            items = [self.index(r, c).data(Qt.ItemDataRole.DisplayRole) for c in range(cols)]
+            w.writerow(items)
+        return buf.getvalue()
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.items)
@@ -764,8 +812,11 @@ class WordsModel(QAbstractTableModel):
         self.do_sort()
         self.endResetModel()
 
-    def filter(self, filter_text):
+    def filter(self, filter_text, *, all_caps=False, with_numbers=False, camel_case=False, snake_case=False, show_only_misspelt=True):
         self.filter_expression = filter_text or None
+        self.all_caps, self.with_numbers = all_caps, with_numbers
+        self.camel_case, self.snake_case = camel_case, snake_case
+        self.show_only_misspelt = show_only_misspelt
         self.beginResetModel()
         self.do_filter()
         self.do_sort()
@@ -809,12 +860,22 @@ class WordsModel(QAbstractTableModel):
         if self.show_only_misspelt and self.spell_map[x]:
             return False
         func = contains if tprefs['spell_check_case_sensitive_search'] else primary_contains
-        if self.filter_expression is not None and not func(self.filter_expression, x[0]):
+        word = x[0]
+        if self.filter_expression is not None and not func(self.filter_expression, word):
+            return False
+        if self.all_caps and upper(word) == word:
+            return False
+        if self.with_numbers and self.num_pat.search(word) is not None:
+            return False
+        if self.camel_case and self.camel_case_pat.search(word) is not None:
+            return False
+        if self.snake_case and self.snake_case_pat.search(word) is not None:
             return False
         return True
 
     def do_filter(self):
         self.items = list(filter(self.filter_item, self.words))
+        self.counts_changed.emit()
 
     def toggle_ignored(self, row):
         w = self.word_for_row(row)
@@ -984,7 +1045,7 @@ class WordsView(QTableView):
         a = m.addAction(_('Add/remove all selected words'))
         am = QMenu(self)
         a.setMenu(am)
-        for dic in sorted(dictionaries.active_user_dictionaries, key=lambda x:sort_key(x.name)):
+        for dic in sorted(dictionaries.active_user_dictionaries, key=lambda x: sort_key(x.name)):
             am.addAction(dic.name, partial(self.add_all.emit, dic.name))
         m.addSeparator()
         m.addAction(_('Copy selected words to clipboard'), self.copy_to_clipboard)
@@ -1100,6 +1161,10 @@ class SpellCheck(Dialog):
         b.setIcon(QIcon.ic('chapters.png'))
         b.clicked.connect(self.change_excluded_files)
         self.update_exclude_button()
+        b = self.save_words_button = self.bb.addButton(_('&Save words'), QDialogButtonBox.ButtonRole.ActionRole)
+        b.setToolTip('<p>' + _('Save the currently displayed list of words in a CSV file'))
+        b.setIcon(QIcon.ic('save.png'))
+        b.clicked.connect(self.save_words)
 
         self.progress = p = QWidget(self)
         s.addWidget(p)
@@ -1119,6 +1184,29 @@ class SpellCheck(Dialog):
         t.textChanged.connect(self.do_filter)
         t.setClearButtonEnabled(True)
         l.addWidget(t)
+        h = QHBoxLayout()
+        l.addLayout(h)
+        h.addWidget(QLabel(_('Also hide words:')))
+        any_hide_checked = False
+        def hw(name, title, tooltip):
+            nonlocal any_hide_checked
+            ac = QCheckBox(title)
+            pref_name = f'spell-check-hide-words-{name}'
+            ac.setObjectName(pref_name)
+            defval = name == 'misspelled'
+            ac.setChecked(tprefs.get(pref_name, defval))
+            if ac.isChecked():
+                any_hide_checked = True
+            ac.toggled.connect(self.hide_words_toggled)
+            ac.setToolTip(tooltip)
+            h.addWidget(ac)
+            return ac
+        self.show_only_misspelt = hw('misspelled', _('&spelled correctly'), _('Hide words that are spelled correctly'))
+        self.all_caps = hw('all-caps', _('&ALL CAPS'), _('Hide words with all capital letters'))
+        self.with_numbers = hw('with-numbers', _('with &numbers'), _('Hide words that contain numbers'))
+        self.camel_case = hw('camel-case', _('ca&melCase'), _('Hide words in camelCase'))
+        self.snake_case = hw('snake-case', _('sna&ke_case'), _('Hide words in snake_case'))
+        h.addStretch(10)
 
         m.h2 = h = QHBoxLayout()
         l.addLayout(h)
@@ -1132,7 +1220,7 @@ class SpellCheck(Dialog):
         state = tprefs.get(self.state_name, None)
         hh = self.words_view.horizontalHeader()
         h.addWidget(w)
-        self.words_model = m = WordsModel(self)
+        self.words_model = m = WordsModel(self, show_only_misspelt=self.show_only_misspelt.isChecked())
         m.counts_changed.connect(self.update_summary)
         w.setModel(m)
         m.dataChanged.connect(self.current_word_changed)
@@ -1142,7 +1230,6 @@ class SpellCheck(Dialog):
             hh.restoreState(state)
             # Sort by the restored state, if any
             w.sortByColumn(hh.sortIndicatorSection(), hh.sortIndicatorOrder())
-            m.show_only_misspelt = hh.isSectionHidden(3)
 
         self.ignore_button = b = QPushButton(_('&Ignore'))
         b.ign_text, b.unign_text = str(b.text()), _('Un&ignore')
@@ -1188,10 +1275,7 @@ class SpellCheck(Dialog):
         set_no_activate_on_click(sl)
         l.addWidget(sl)
 
-        hh.setSectionHidden(3, m.show_only_misspelt)
-        self.show_only_misspelled = om = QCheckBox(_('Show &only misspelled words'))
-        om.setChecked(m.show_only_misspelt)
-        om.stateChanged.connect(self.update_show_only_misspelt)
+        hh.setSectionHidden(3, self.show_only_misspelt.isChecked())
         self.case_sensitive_sort = cs = QCheckBox(_('Case &sensitive sort'))
         cs.setChecked(tprefs['spell_check_case_sensitive_sort'])
         cs.setToolTip(_('When sorting the list of words, be case sensitive'))
@@ -1200,9 +1284,8 @@ class SpellCheck(Dialog):
         cs2.setToolTip(_('When filtering the list of words, be case sensitive'))
         cs2.setChecked(tprefs['spell_check_case_sensitive_search'])
         cs2.stateChanged.connect(self.search_type_changed)
-        self.hb = h = FlowLayout()
-        self.summary = s = QLabel('')
-        self.main.l.addLayout(h), h.addWidget(s), h.addWidget(om), h.addWidget(cs), h.addWidget(cs2)
+        self.hb = h = QHBoxLayout()
+        self.main.l.addLayout(h), h.addWidget(cs), h.addWidget(cs2), h.addStretch(11)
         self.action_next_word = a = QAction(self)
         a.setShortcut(QKeySequence(Qt.Key.Key_Down))
         a.triggered.connect(self.next_word)
@@ -1222,6 +1305,16 @@ class SpellCheck(Dialog):
 
         self.action_change_word = button_action('ctrl+right', _('Change all occurrences of this word'), self.change_button)
         self.action_show_next_occurrence = button_action('alt+right', _('Show next occurrence of this word in the book'), self.next_occurrence)
+        if any_hide_checked:
+            QTimer.singleShot(0, self.do_filter)
+
+    def hide_words_toggled(self, checked):
+        cb = self.sender()
+        pref_name = cb.objectName()
+        if 'misspelled' in pref_name:
+            self.words_view.horizontalHeader().setSectionHidden(3, self.show_only_misspelt.isChecked())
+        tprefs.set(pref_name, checked)
+        self.do_filter()
 
     def next_word(self):
         v = self.suggested_list if self.focusWidget() is self.suggested_list else self.words_view
@@ -1236,6 +1329,14 @@ class SpellCheck(Dialog):
             ev.accept()
             return
         return Dialog.keyPressEvent(self, ev)
+
+    def save_words(self):
+        dest = choose_save_file(self, 'spellcheck-csv-export', _('CSV file'), filters=[(_('CSV file'), ['csv'])],
+                               all_files=False, initial_filename=_('Words') + '.csv')
+        if dest:
+            csv = self.words_view.model().to_csv()
+            with open(dest, 'wb') as f:
+                f.write(csv.encode())
 
     def change_excluded_files(self):
         d = ManageExcludedFiles(self, self.excluded_files)
@@ -1416,12 +1517,6 @@ class SpellCheck(Dialog):
             else:
                 self.words_model.remove_word(current.row())
 
-    def update_show_only_misspelt(self):
-        m = self.words_model
-        m.show_only_misspelt = self.show_only_misspelled.isChecked()
-        self.words_view.horizontalHeader().setSectionHidden(3, m.show_only_misspelt)
-        self.do_filter()
-
     def __enter__(self):
         idx = self.words_view.currentIndex().row()
         self.__current_word = self.words_model.word_for_row(idx)
@@ -1435,7 +1530,10 @@ class SpellCheck(Dialog):
     def do_filter(self):
         text = str(self.filter_text.text()).strip()
         with self:
-            self.words_model.filter(text)
+            self.words_model.filter(
+                    text, all_caps=self.all_caps.isChecked(), with_numbers=self.with_numbers.isChecked(),
+                    camel_case=self.camel_case.isChecked(), snake_case=self.snake_case.isChecked(),
+                    show_only_misspelt=self.show_only_misspelt.isChecked())
 
     def refresh(self, change_request=None):
         if not self.isVisible():
@@ -1506,7 +1604,15 @@ class SpellCheck(Dialog):
                     ' and the word %s no longer exists.') % w[0], show=True)
 
     def update_summary(self):
-        self.summary.setText(_('Misspelled words: {0} Total words: {1}').format(*self.words_model.counts))
+        misspelled, total = self.words_model.counts
+        visible = len(self.words_model.items)
+        if visible not in (misspelled, total):  # some filter is active
+            if self.show_only_misspelt.isChecked():
+                self.setWindowTitle(_('Spellcheck showing: {0} of {1} misspelled with {2} total words').format(visible, misspelled, total))
+            else:
+                self.setWindowTitle(_('Spellcheck showing: {0} of {2} total with {1} misspelled words').format(visible, misspelled, total))
+        else:
+            self.setWindowTitle(_('Spellcheck showing: {0} misspelled of {1} total words').format(misspelled, total))
 
     def sizeHint(self):
         return QSize(1000, 650)
@@ -1535,8 +1641,8 @@ class SpellCheck(Dialog):
         d.exec()
 # }}}
 
-# Find next occurrence  {{{
 
+# Find next occurrence {{{
 
 def find_next(word, locations, current_editor, current_editor_name,
               gui_parent, show_editor, edit_file):

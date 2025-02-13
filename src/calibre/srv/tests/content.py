@@ -14,7 +14,8 @@ from calibre.ebooks.metadata.epub import get_metadata
 from calibre.ebooks.metadata.opf2 import OPF
 from calibre.srv.tests.base import LibraryBaseTest
 from calibre.utils.imghdr import identify
-from calibre.utils.resources import get_image_path as I, get_path as P
+from calibre.utils.resources import get_image_path as I
+from calibre.utils.resources import get_path as P
 from calibre.utils.shared_file import share_open
 from polyglot import http_client
 from polyglot.binary import from_hex_unicode
@@ -40,9 +41,9 @@ class ContentTest(LibraryBaseTest):
                 self.ae(r.read(), body)
 
             for prefix in ('static', 'icon'):
-                missing('/%s/missing.xxx' % prefix)
-                missing('/%s/../out.html' % prefix, b'Naughty, naughty!')
-                missing('/%s/C:/out.html' % prefix, b'Naughty, naughty!')
+                missing(f'/{prefix}/missing.xxx')
+                missing(f'/{prefix}/../out.html', b'Naughty, naughty!')
+                missing(f'/{prefix}/C:/out.html', b'Naughty, naughty!')
 
             def test_response(r):
                 self.assertIn('max-age=', r.getheader('Cache-Control'))
@@ -255,16 +256,16 @@ class ContentTest(LibraryBaseTest):
             bc = data['tree']['c'][1]['c']
             self.ae(bc, body_children)
 
-        t('<p>a<!--c-->t</p>l', [{"n":"p","x":"a","l":"l","c":[{"s":"c","x":"c","l":"t"}]}])
-        t('<p class="foo" id="bar">a', [{"n":"p","x":"a","a":[['class','foo'],['id','bar']]}])
+        t('<p>a<!--c-->t</p>l', [{'n':'p','x':'a','l':'l','c':[{'s':'c','x':'c','l':'t'}]}])
+        t('<p class="foo" id="bar">a', [{'n':'p','x':'a','a':[['class','foo'],['id','bar']]}])
         t(
             '<svg xlink:href="h"></svg>', [{'n': 'svg', 's': 1, 'a': [['href', 'h', 2]]}],
             ('http://www.w3.org/1999/xhtml', 'http://www.w3.org/2000/svg', 'http://www.w3.org/1999/xlink')
         )
         text = '🐈\n\t\\mūs"'
-        t(f"<p id='{text}'>Peña", [{"n":"p","x":"Peña","a":[['id',text]]}])
+        t(f"<p id='{text}'>Peña", [{'n':'p','x':'Peña','a':[['id',text]]}])
         text = 'a' * (127 * 1024)
-        t('<p>{0}<p>{0}'.format(text), [{"n":"p","x":text}, {'n':'p','x':text}])
+        t(f'<p>{text}<p>{text}', [{'n':'p','x':text}, {'n':'p','x':text}])
     # }}}
 
     def test_last_read_cache(self):  # {{{

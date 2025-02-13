@@ -7,10 +7,10 @@ __copyright__ = '2014, Kovid Goyal <kovid at kovidgoyal.net>'
 from lxml import etree
 
 from calibre import prepare_string_for_xml as xml
-from calibre.ebooks.oeb.polish.check.base import BaseError, WARN
+from calibre.ebooks.oeb.base import DC, DC11_NS, OPF, OPF2_NS, XHTML_MIME
+from calibre.ebooks.oeb.polish.check.base import WARN, BaseError
 from calibre.ebooks.oeb.polish.toc import find_existing_nav_toc, parse_nav
 from calibre.ebooks.oeb.polish.utils import guess_type
-from calibre.ebooks.oeb.base import OPF, OPF2_NS, DC, DC11_NS, XHTML_MIME
 from polyglot.builtins import iteritems
 
 
@@ -214,7 +214,7 @@ class MultipleCovers(BaseError):
         self.all_locations = [(name, lnum, None) for lnum in sorted(locs)]
 
     def __call__(self, container):
-        items = [e for e in container.opf_xpath('/opf:package/opf:metadata/opf:meta[@name="cover"]')]
+        items = list(container.opf_xpath('/opf:package/opf:metadata/opf:meta[@name="cover"]'))
         [container.remove_from_xml(e) for e in items[1:]]
         container.dirty(self.name)
         return True
@@ -279,7 +279,7 @@ class BadSpineMime(BaseError):
             self.iid = iid
 
     def __call__(self, container):
-        container.opf_xpath('/opf:package/opf:manifest/opf:item[@id=%r]' % self.iid)[0].set(
+        container.opf_xpath(f'/opf:package/opf:manifest/opf:item[@id={self.iid!r}]')[0].set(
             'media-type', XHTML_MIME)
         container.dirty(container.opf_name)
         container.refresh_mime_map()
@@ -398,7 +398,7 @@ def check_opf(container):
     if uid is None:
         errors.append(NoUID(container.opf_name))
     else:
-        dcid = container.opf_xpath('/opf:package/opf:metadata/dc:identifier[@id=%r]' % uid)
+        dcid = container.opf_xpath(f'/opf:package/opf:metadata/dc:identifier[@id={uid!r}]')
         if not dcid or not dcid[0].text or not dcid[0].text.strip():
             errors.append(NoUID(container.opf_name))
     for elem in container.opf_xpath('/opf:package/opf:metadata/dc:identifier'):
@@ -411,7 +411,7 @@ def check_opf(container):
             iid = item.get('idref', None)
             lnum = None
             if iid:
-                mitem = container.opf_xpath('/opf:package/opf:manifest/opf:item[@id=%r]' % iid)
+                mitem = container.opf_xpath(f'/opf:package/opf:manifest/opf:item[@id={iid!r}]')
                 if mitem:
                     lnum = mitem[0].sourceline
                 else:

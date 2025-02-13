@@ -135,7 +135,7 @@ class Writer(FormatWriter):
             if item.media_type in OEB_RASTER_IMAGES and item.href in image_hrefs.keys():
                 try:
                     im = Image.open(io.BytesIO(item.data)).convert('P')
-                    im.thumbnail((300,300), Image.ANTIALIAS)
+                    im.thumbnail((300,300), Image.Resampling.LANCZOS)
 
                     data = io.BytesIO()
                     im.save(data, 'PNG')
@@ -151,8 +151,8 @@ class Writer(FormatWriter):
                     if len(data) + len(header) < 65505:
                         images.append((header, data))
                 except Exception as e:
-                    self.log.error('Error: Could not include file %s because '
-                        '%s.' % (item.href, e))
+                    self.log.error(f'Error: Could not include file {item.href} because '
+                        f'{e}.')
 
         return images
 

@@ -7,27 +7,35 @@ __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 import math
 import unicodedata
 from functools import partial
+
 from qt.core import (
-    QAction, QApplication, QColor, QIcon, QImage, QInputDialog, QMainWindow, QMenu,
-    QPainter, QPixmap, QSize, Qt, QTextCursor, QToolButton, pyqtSignal,
-    qDrawShadeRect
+    QAction,
+    QApplication,
+    QColor,
+    QIcon,
+    QImage,
+    QInputDialog,
+    QMainWindow,
+    QMenu,
+    QPainter,
+    QPixmap,
+    QSize,
+    Qt,
+    QTextCursor,
+    QToolButton,
+    pyqtSignal,
+    qDrawShadeRect,
 )
 
 from calibre import prints
 from calibre.constants import DEBUG
 from calibre.ebooks.chardet import replace_encoding_declarations
 from calibre.gui2 import error_dialog, open_url
-from calibre.gui2.tweak_book import (
-    actions, current_container, dictionaries, editor_name, editor_toolbar_actions,
-    editors, tprefs, update_mark_text_action
-)
-from calibre.gui2.tweak_book.editor import (
-    CLASS_ATTRIBUTE_PROPERTY, CSS_PROPERTY, LINK_PROPERTY, SPELL_PROPERTY,
-    TAG_NAME_PROPERTY
-)
+from calibre.gui2.tweak_book import actions, current_container, dictionaries, editor_name, editor_toolbar_actions, editors, tprefs, update_mark_text_action
+from calibre.gui2.tweak_book.editor import CLASS_ATTRIBUTE_PROPERTY, CSS_PROPERTY, LINK_PROPERTY, SPELL_PROPERTY, TAG_NAME_PROPERTY
 from calibre.gui2.tweak_book.editor.help import help_url
 from calibre.gui2.tweak_book.editor.text import TextEdit
-from calibre.utils.icu import utf16_length, primary_sort_key
+from calibre.utils.icu import primary_sort_key, utf16_length
 from polyglot.builtins import itervalues, string_or_bytes
 
 
@@ -104,7 +112,7 @@ def register_text_editor_actions(_reg, palette):
     for i, name in enumerate(('h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p')):
         text = ('&' + name) if name == 'p' else (name[0] + '&' + name[1])
         desc = _('Convert the paragraph to &lt;%s&gt;') % name
-        ac = reg(create_icon(name), text, ('rename_block_tag', name), 'rename-block-tag-' + name, 'Ctrl+%d' % (i + 1), desc, syntaxes=())
+        ac = reg(create_icon(name), text, ('rename_block_tag', name), 'rename-block-tag-' + name, f'Ctrl+{i + 1}', desc, syntaxes=())
         ac.setToolTip(desc)
 
     for transform, text in [
@@ -374,10 +382,10 @@ class Editor(QMainWindow):
         for bar in self.bars:
             if bar.isFloating():
                 return
-        tprefs['%s-editor-state' % self.syntax] = bytearray(self.saveState())
+        tprefs[f'{self.syntax}-editor-state'] = bytearray(self.saveState())
 
     def restore_state(self):
-        state = tprefs.get('%s-editor-state' % self.syntax, None)
+        state = tprefs.get(f'{self.syntax}-editor-state', None)
         if state is not None:
             self.restoreState(state)
         for bar in self.bars:
@@ -394,7 +402,7 @@ class Editor(QMainWindow):
                 ac = actions[name]
             except KeyError:
                 if DEBUG:
-                    prints('Unknown editor tool: %r' % name)
+                    prints(f'Unknown editor tool: {name!r}')
                 return
             bar.addAction(ac)
             if name == 'insert-tag':
@@ -415,13 +423,13 @@ class Editor(QMainWindow):
                     # For some unknown reason this button is occasionally a
                     # QPushButton instead of a QToolButton
                     ch.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-                for name in tuple('h%d' % d for d in range(1, 7)) + ('p',):
-                    m.addAction(actions['rename-block-tag-%s' % name])
+                for name in tuple(f'h{d}' for d in range(1, 7)) + ('p',):
+                    m.addAction(actions[f'rename-block-tag-{name}'])
 
         for name in tprefs.get('editor_common_toolbar', ()):
             add_action(name, self.action_bar)
 
-        for name in tprefs.get('editor_%s_toolbar' % self.syntax, ()):
+        for name in tprefs.get(f'editor_{self.syntax}_toolbar', ()):
             add_action(name, self.tools_bar)
 
         if self.syntax == 'html':
@@ -513,9 +521,7 @@ class Editor(QMainWindow):
         return False
 
     def pretty_print(self, name):
-        from calibre.ebooks.oeb.polish.pretty import (
-            pretty_css, pretty_html, pretty_xml
-        )
+        from calibre.ebooks.oeb.polish.pretty import pretty_css, pretty_html, pretty_xml
         if self.syntax in {'css', 'html', 'xml'}:
             func = {'css':pretty_css, 'xml':pretty_xml}.get(self.syntax, pretty_html)
             original_text = str(self.editor.toPlainText())
@@ -594,7 +600,7 @@ class Editor(QMainWindow):
                 m.addAction(_('Show help for: %s') % word, partial(open_url, url))
 
         for x in ('undo', 'redo'):
-            ac = actions['editor-%s' % x]
+            ac = actions[f'editor-{x}']
             if ac.isEnabled():
                 a(ac)
         m.addSeparator()
@@ -644,7 +650,7 @@ def launch_editor(path_to_edit, path_is_raw=False, syntax='html', callback=None)
     opts = option_parser().parse_args([])
     app = Application([])
     # Create the actions that are placed into the editors toolbars
-    main = Main(opts)  # noqa
+    main = Main(opts)  # noqa: F841
     if path_is_raw:
         raw = path_to_edit
     else:

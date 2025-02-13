@@ -21,6 +21,7 @@ class QCoreTextFontEngine;
 #include <qpa/qplatformwindow.h>
 #include <qpa/qplatformfontdatabase.h>
 #include <qpa/qplatformtheme.h>
+#include <qpa/qplatformnativeinterface.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -122,17 +123,22 @@ QAbstractEventDispatcher *HeadlessIntegration::createEventDispatcher() const
 #endif
 }
 
+QPlatformNativeInterface *HeadlessIntegration::nativeInterface() const
+{
+    if (!m_nativeInterface)
+        m_nativeInterface.reset(new QPlatformNativeInterface);
+    return m_nativeInterface.get();
+}
+
 HeadlessIntegration *HeadlessIntegration::instance()
 {
     return static_cast<HeadlessIntegration *>(QGuiApplicationPrivate::platformIntegration());
 }
 
-static QString themeName() { return QStringLiteral("headless"); }
 
-QStringList HeadlessIntegration::themeNames() const
-{
-    return QStringList(themeName());
-}
+#define THEME_NAME "headless"
+
+QStringList HeadlessIntegration::themeNames() const { return QStringList(THEME_NAME); }
 
 // Restrict the styles to "fusion" to prevent native styles requiring native
 // window handles (eg Windows Vista style) from being used.
@@ -155,7 +161,7 @@ public:
 
 QPlatformTheme *HeadlessIntegration::createPlatformTheme(const QString &name) const
 {
-    return name == themeName() ? new HeadlessTheme() : nullptr;
+    return name == THEME_NAME ? new HeadlessTheme() : nullptr;
 }
 
 QT_END_NAMESPACE

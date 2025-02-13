@@ -11,9 +11,7 @@ from contextlib import closing, suppress
 from math import ceil
 
 from calibre import force_unicode, isbytestring, prints, sanitize_file_name
-from calibre.constants import (
-    filesystem_encoding, ismacos, iswindows, preferred_encoding,
-)
+from calibre.constants import filesystem_encoding, ismacos, iswindows, preferred_encoding
 from calibre.utils.localization import _, get_udc
 from polyglot.builtins import iteritems, itervalues
 
@@ -133,6 +131,47 @@ def is_case_sensitive(path):
     return is_case_sensitive
 
 
+def case_ignoring_open_file(path, mode='r'):
+    '''
+    Open an existing file case insensitively, even on case sensitive file systems
+    '''
+    try:
+        return open(path, mode)
+    except FileNotFoundError as err:
+        original_err = err
+
+    def next_component(final_path, components):
+        if not components:
+            return final_path
+        component = components.pop()
+        cl = component.lower()
+        try:
+            matches = {x for x in os.listdir(final_path) if x.lower() == cl}
+        except OSError:
+            raise original_err from None
+        for x in matches:
+            current = os.path.join(final_path, x)
+            try:
+                return next_component(current, list(components))
+            except Exception:
+                continue
+        raise original_err
+
+    if isbytestring(path):
+        path = path.decode(filesystem_encoding)
+    if path.endswith(os.sep):
+        path = path[:-1]
+    if not path:
+        raise ValueError('Path must not point to root')
+
+    components = path.split(os.sep)
+    if len(components) <= 1:
+        raise ValueError(f'Invalid path: {path}')
+    final_path = (components[0].upper() + os.sep) if iswindows else '/'
+    components = list(reversed(components))[:-1]
+    return open(next_component(final_path, components), mode)
+
+
 def case_preserving_open_file(path, mode='wb', mkdir_mode=0o777):
     '''
     Open the file pointed to by path with the specified mode. If any
@@ -162,7 +201,7 @@ def case_preserving_open_file(path, mode='wb', mkdir_mode=0o777):
 
     components = path.split(sep)
     if not components:
-        raise ValueError('Invalid path: %r'%path)
+        raise ValueError(f'Invalid path: {path!r}')
 
     cpath = sep
     if iswindows:
@@ -299,8 +338,8 @@ def windows_hardlink(src, dest):
 
     sz = windows_get_size(dest)
     if sz != src_size:
-        msg = f'Creating hardlink from {src} to {dest} failed: %s'
-        raise OSError(msg % ('hardlink size: %d not the same as source size' % sz))
+        msg = f'Creating hardlink from {src} to {dest} failed: '
+        raise OSError(msg + (f'hardlink size: {sz} not the same as source size'))
 
 
 def windows_fast_hardlink(src, dest):
@@ -308,8 +347,8 @@ def windows_fast_hardlink(src, dest):
     winutil.create_hard_link(dest, src)
     ssz, dsz = windows_get_size(src), windows_get_size(dest)
     if ssz != dsz:
-        msg = f'Creating hardlink from {src} to {dest} failed: %s'
-        raise OSError(msg % ('hardlink size: %d not the same as source size: %s' % (dsz, ssz)))
+        msg = f'Creating hardlink from {src} to {dest} failed: '
+        raise OSError(msg + (f'hardlink size: {dsz} not the same as source size: {ssz}'))
 
 
 def windows_nlinks(path):
@@ -320,7 +359,6 @@ def windows_nlinks(path):
 
 
 class WindowsAtomicFolderMove:
-
     '''
     Move all the files inside a specified folder in an atomic fashion,
     preventing any other process from locking a file while the operation is
@@ -377,15 +415,15 @@ class WindowsAtomicFolderMove:
 
                 self.close_handles()
                 if e.winerror == winutil.ERROR_SHARING_VIOLATION:
-                    err = IOError(errno.EACCES,
+                    err = OSError(errno.EACCES,
                             _('File is open in another process'))
                     err.filename = f
                     raise err
-                prints('CreateFile failed for: %r' % f)
+                prints(f'CreateFile failed for: {f!r}')
                 raise
             except:
                 self.close_handles()
-                prints('CreateFile failed for: %r' % f)
+                prints(f'CreateFile failed for: {f!r}')
                 raise
             self.handle_map[f] = h
 
@@ -398,10 +436,10 @@ class WindowsAtomicFolderMove:
                 break
         if handle is None:
             if os.path.exists(path):
-                raise ValueError('The file %r did not exist when this move'
-                        ' operation was started'%path)
+                raise ValueError(f'The file {path!r} did not exist when this move'
+                        ' operation was started')
             else:
-                raise ValueError('The file %r does not exist'%path)
+                raise ValueError(f'The file {path!r} does not exist')
 
         with suppress(OSError):
             windows_hardlink(path, dest)
@@ -497,21 +535,26 @@ def remove_dir_if_empty(path, ignore_metadata_caches=False):
     try:
         os.rmdir(path)
     except OSError as e:
-        if e.errno == errno.ENOTEMPTY or len(os.listdir(path)) > 0:
+        try:
+            entries = os.listdir(path)
+        except FileNotFoundError:  # something deleted path out from under us
+            return
+        if e.errno == errno.ENOTEMPTY or len(entries) > 0:
             # Some linux systems appear to raise an EPERM instead of an
             # ENOTEMPTY, see https://bugs.launchpad.net/bugs/1240797
             if ignore_metadata_caches:
                 try:
                     found = False
-                    for x in os.listdir(path):
+                    for x in entries:
                         if x.lower() in {'.ds_store', 'thumbs.db'}:
                             found = True
                             x = os.path.join(path, x)
-                            if os.path.isdir(x):
-                                import shutil
-                                shutil.rmtree(x)
-                            else:
-                                os.remove(x)
+                            with suppress(FileNotFoundError):
+                                if os.path.isdir(x):
+                                    import shutil
+                                    shutil.rmtree(x)
+                                else:
+                                    os.remove(x)
                 except Exception:  # We could get an error, if, for example, windows has locked Thumbs.db
                     found = False
                 if found:
@@ -553,8 +596,12 @@ def get_hardlink_function(src, dest):
     if not iswindows:
         return os.link
     from calibre_extensions import winutil
+    if src.startswith(long_path_prefix):
+        src = src[len(long_path_prefix):]
+    if dest.startswith(long_path_prefix):
+        dest = dest[len(long_path_prefix):]
     root = dest[0] + ':\\'
-    if src[0].lower() == dest[0].lower() and hasattr(winutil, 'supports_hardlinks') and winutil.supports_hardlinks(root):
+    if src[0].lower() == dest[0].lower() and winutil.supports_hardlinks(root):
         return windows_fast_hardlink
 
 
@@ -563,6 +610,7 @@ def copyfile_using_links(path, dest, dest_is_dir=True, filecopyfunc=copyfile):
     if dest_is_dir:
         dest = os.path.join(dest, os.path.basename(path))
     hardlink = get_hardlink_function(path, dest)
+    path, dest = make_long_path_useable(path), make_long_path_useable(dest)
     try:
         hardlink(path, dest)
     except Exception:
@@ -632,7 +680,7 @@ if iswindows:
         except FileNotFoundError:
             return path
         except OSError as e:
-            if e.winerror == 123: # ERR_INVALID_NAME
+            if e.winerror == 123:  # ERR_INVALID_NAME
                 return path
             raise
 

@@ -2,12 +2,13 @@
 # License: GPLv3 Copyright: 2015, Kovid Goyal <kovid at kovidgoyal.net>
 
 
-import apsw
 import json
 import os
 import re
 from functools import lru_cache
 from threading import RLock
+
+import apsw
 
 from calibre import as_unicode
 from calibre.constants import config_dir
@@ -35,8 +36,8 @@ def parse_restriction(raw):
     lr = r.get('library_restrictions', {})
     if not isinstance(lr, dict):
         lr = {}
-    r['allowed_library_names'] = frozenset(map(lambda x: x.lower(), r.get('allowed_library_names', ())))
-    r['blocked_library_names'] = frozenset(map(lambda x: x.lower(), r.get('blocked_library_names', ())))
+    r['allowed_library_names'] = frozenset(x.lower() for x in r.get('allowed_library_names', ()))
+    r['blocked_library_names'] = frozenset(x.lower() for x in r.get('blocked_library_names', ()))
     r['library_restrictions'] = {k.lower(): v or '' for k, v in iteritems(lr)}
     return r
 

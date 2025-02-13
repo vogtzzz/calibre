@@ -16,10 +16,10 @@ from operator import itemgetter
 from threading import Thread
 
 from calibre import force_unicode, isbytestring
-from calibre.constants import filesystem_encoding
+from calibre.constants import filesystem_encoding, iswindows
 from calibre.db.backend import DB, DBPrefs
-from calibre.db.constants import METADATA_FILE_NAME, TRASH_DIR_NAME
 from calibre.db.cache import Cache
+from calibre.db.constants import METADATA_FILE_NAME, NOTES_DB_NAME, NOTES_DIR_NAME, TRASH_DIR_NAME
 from calibre.ebooks.metadata.opf2 import OPF
 from calibre.ptempfile import TemporaryDirectory
 from calibre.utils.date import utcfromtimestamp
@@ -53,7 +53,9 @@ def is_ebook_file(filename):
 class Restorer(Cache):
 
     def __init__(self, library_path, default_prefs=None, restore_all_prefs=False, progress_callback=lambda x, y:True):
-        backend = DB(library_path, default_prefs=default_prefs, restore_all_prefs=restore_all_prefs, progress_callback=progress_callback)
+        backend = DB(
+            library_path, default_prefs=default_prefs, restore_all_prefs=restore_all_prefs, progress_callback=progress_callback
+        )
         Cache.__init__(self, backend)
         for x in ('update_path', 'mark_as_dirty'):
             setattr(self, x, self.no_op)
@@ -81,6 +83,7 @@ class Restore(Thread):
         self.conflicting_custom_cols = {}
         self.failed_restores = []
         self.mismatched_dirs = []
+        self.notes_errors = []
         self.successes = 0
         self.tb = None
         self.link_maps = {}
@@ -88,7 +91,7 @@ class Restore(Thread):
     @property
     def errors_occurred(self):
         return (self.failed_dirs or self.mismatched_dirs or
-                self.conflicting_custom_cols or self.failed_restores)
+                self.conflicting_custom_cols or self.failed_restores or self.notes_errors)
 
     @property
     def report(self):
@@ -104,17 +107,13 @@ class Restore(Thread):
 
         if self.conflicting_custom_cols:
             ans += '\n\n'
-            ans += 'The following custom columns have conflicting definitions ' \
-                    'and were not fully restored:\n'
+            ans += ('The following custom columns have conflicting definitions '
+                    'and were not fully restored:\n')
             for x in self.conflicting_custom_cols:
                 ans += '\t#'+x+'\n'
-                ans += '\tused:\t%s, %s, %s, %s\n'%(self.custom_columns[x][1],
-                                                    self.custom_columns[x][2],
-                                                    self.custom_columns[x][3],
-                                                    self.custom_columns[x][5])
+                ans += f'\tused:\t{self.custom_columns[x][1]}, {self.custom_columns[x][2]}, {self.custom_columns[x][3]}, {self.custom_columns[x][5]}\n'
                 for coldef in self.conflicting_custom_cols[x]:
-                    ans += '\tother:\t%s, %s, %s, %s\n'%(coldef[1], coldef[2],
-                                                         coldef[3], coldef[5])
+                    ans += f'\tother:\t{coldef[1]}, {coldef[2]}, {coldef[3]}, {coldef[5]}\n'
 
         if self.mismatched_dirs:
             ans += '\n\n'
@@ -122,6 +121,11 @@ class Restore(Thread):
             for x in self.mismatched_dirs:
                 ans += '\t' + force_unicode(x, filesystem_encoding) + '\n'
 
+        if self.notes_errors:
+            ans += '\n\n'
+            ans += 'Failed to restore notes for the following items:\n'
+            for x in self.notes_errors:
+                ans += '\t' + x
         return ans
 
     def run(self):
@@ -154,10 +158,10 @@ class Restore(Thread):
             self.tb = traceback.format_exc()
             if self.failed_dirs:
                 for x in self.failed_dirs:
-                    for (dirpath, tb) in self.failed_dirs:
+                    for dirpath, tb in self.failed_dirs:
                         self.tb += f'\n\n-------------\nFailed to restore: {dirpath}\n{tb}'
             if self.failed_restores:
-                for (book, tb) in self.failed_restores:
+                for book, tb in self.failed_restores:
                     self.tb += f'\n\n-------------\nFailed to restore: {book["path"]}\n{tb}'
 
     def load_preferences(self):
@@ -245,7 +249,7 @@ class Restore(Thread):
             dest = self.link_maps.setdefault(field, {})
             for item, link in lmap.items():
                 existing_link, timestamp = dest.get(item, (None, None))
-                if existing_link is None or existing_link != link and timestamp < mi.timestamp:
+                if existing_link is None or (existing_link != link and timestamp < mi.timestamp):
                     dest[item] = link, mi.timestamp
 
     def create_cc_metadata(self):
@@ -285,6 +289,12 @@ class Restore(Thread):
         self.progress_callback(None, len(self.books))
         self.books.sort(key=itemgetter('id'))
 
+        notes_dest = os.path.join(self.library_path, NOTES_DIR_NAME)
+        if os.path.exists(notes_dest):  # created by load_preferences()
+            shutil.rmtree(notes_dest)
+        shutil.copytree(os.path.join(self.src_library_path, NOTES_DIR_NAME), notes_dest)
+        with suppress(FileNotFoundError):
+            os.remove(os.path.join(notes_dest, NOTES_DB_NAME))
         db = Restorer(self.library_path)
 
         for i, book in enumerate(self.books):
@@ -299,20 +309,50 @@ class Restore(Thread):
         for field, lmap in self.link_maps.items():
             with suppress(Exception):
                 db.set_link_map(field, {k:v[0] for k, v in lmap.items()})
+        self.notes_errors = db.backend.restore_notes(self.progress_callback)
         db.close()
 
     def replace_db(self):
         dbpath = os.path.join(self.src_library_path, 'metadata.db')
         ndbpath = os.path.join(self.library_path, 'metadata.db')
+        sleep_time = 30 if iswindows else 0
 
         save_path = self.olddb = os.path.splitext(dbpath)[0]+'_pre_restore.db'
         if os.path.exists(save_path):
             os.remove(save_path)
         if os.path.exists(dbpath):
             try:
-                os.rename(dbpath, save_path)
+                os.replace(dbpath, save_path)
             except OSError:
-                time.sleep(30)  # Wait a little for dropbox or the antivirus or whatever to release the file
+                if iswindows:
+                    time.sleep(sleep_time)  # Wait a little for dropbox or the antivirus or whatever to release the file
                 shutil.copyfile(dbpath, save_path)
                 os.remove(dbpath)
         shutil.copyfile(ndbpath, dbpath)
+
+        old_notes_path = os.path.join(self.src_library_path, NOTES_DIR_NAME)
+        new_notes_path = os.path.join(self.library_path, NOTES_DIR_NAME)
+        temp = old_notes_path + '-staging'
+        with suppress(OSError):
+            shutil.rmtree(temp)
+        try:
+            shutil.move(new_notes_path, temp)
+        except OSError:
+            if not iswindows:
+                raise
+            time.sleep(sleep_time)  # Wait a little for dropbox or the antivirus or whatever to release the file
+            shutil.move(new_notes_path, temp)
+        try:
+            shutil.rmtree(old_notes_path)
+        except OSError:
+            if not iswindows:
+                raise
+            time.sleep(sleep_time)  # Wait a little for dropbox or the antivirus or whatever to release the file
+            shutil.rmtree(old_notes_path)
+        try:
+            shutil.move(temp, old_notes_path)
+        except OSError:
+            if not iswindows:
+                raise
+            time.sleep(sleep_time)  # Wait a little for dropbox or the antivirus or whatever to release the file
+            shutil.move(temp, old_notes_path)

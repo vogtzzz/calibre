@@ -5,9 +5,7 @@ __license__   = 'GPL v3'
 __copyright__ = '2009, Kovid Goyal kovid@kovidgoyal.net'
 __docformat__ = 'restructuredtext en'
 
-from qt.core import (
-    QDialog, pyqtSignal, Qt, QVBoxLayout, QLabel, QFont, QProgressBar, QSize,
-    QDialogButtonBox, QApplication, QFontMetrics, QHBoxLayout, QIcon)
+from qt.core import QApplication, QDialog, QDialogButtonBox, QFont, QFontMetrics, QHBoxLayout, QIcon, QLabel, QProgressBar, QSize, Qt, QVBoxLayout, pyqtSignal
 
 from calibre.gui2 import elided_text, question_dialog
 from calibre.gui2.progress_indicator import ProgressIndicator
@@ -178,5 +176,5 @@ if __name__ == '__main__':
     app = QApplication([])
     d = ProgressDialog('A title', 'A message', icon='lt.png')
     d.show(), d.canceled_signal.connect(app.quit)
-    QTimer.singleShot(1000, lambda : (setattr(d, 'value', 10), setattr(d, 'msg', ('A message ' * 100))))
+    QTimer.singleShot(1000, lambda: (setattr(d, 'value', 10), setattr(d, 'msg', ('A message ' * 100))))
     app.exec()

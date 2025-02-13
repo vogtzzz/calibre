@@ -5,10 +5,27 @@ __license__ = 'GPL v3'
 __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 
 from functools import partial
+
 from qt.core import (
-    QAbstractItemView, QAction, QComboBox, QDialog, QDialogButtonBox, QFrame,
-    QGridLayout, QIcon, QLabel, QLineEdit, QListView, QMenu, QRadioButton, QSize,
-    QSortFilterProxyModel, QStringListModel, Qt, QTextBrowser, QVBoxLayout,
+    QAbstractItemView,
+    QAction,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFrame,
+    QGridLayout,
+    QIcon,
+    QLabel,
+    QLineEdit,
+    QListView,
+    QMenu,
+    QRadioButton,
+    QSize,
+    QSortFilterProxyModel,
+    QStringListModel,
+    Qt,
+    QTextBrowser,
+    QVBoxLayout,
 )
 
 from calibre.gui2 import error_dialog, gprefs, question_dialog
@@ -255,14 +272,14 @@ class CreateVirtualLibrary(QDialog):  # {{{
         if f == 'search':
             names = db.saved_search_names()
         else:
-            names = getattr(db, 'all_%s_names'%f)()
+            names = getattr(db, f'all_{f}_names')()
         d = SelectNames(names, txt, parent=self)
         if d.exec() == QDialog.DialogCode.Accepted:
             prefix = f+'s' if f in {'tag', 'author'} else f
             if f == 'search':
-                search = ['(%s)'%(db.saved_search_lookup(x)) for x in d.names]
+                search = [f'({db.saved_search_lookup(x)})' for x in d.names]
             else:
-                search = ['%s:"=%s"'%(prefix, x.replace('"', '\\"')) for x in d.names]
+                search = ['{}:"={}"'.format(prefix, x.replace('"', '\\"')) for x in d.names]
             if search:
                 if not self.editing:
                     self.vl_name.lineEdit().setText(next(d.names))
@@ -358,7 +375,7 @@ class SearchRestrictionMixin:
 
         self.search_restriction = ComboBoxWithHelp(self)
         self.search_restriction.setVisible(False)
-        self.clear_vl.setText(_("(all books)"))
+        self.clear_vl.setText(_('(all books)'))
         self.ar_menu = QMenu(_('Additional restriction'), self.virtual_library_menu)
         self.edit_menu = QMenu(_('Edit Virtual library'), self.virtual_library_menu)
         self.rm_menu = QMenu(_('Remove Virtual library'), self.virtual_library_menu)
@@ -524,8 +541,8 @@ class SearchRestrictionMixin:
             return error_dialog(self, _('No Virtual libraries'), _(
                 'No Virtual libraries present, create some first'), show=True)
         example = '<pre>{0}S{1}ome {0}B{1}ook {0}C{1}ollection</pre>'.format(
-            '<span style="%s">' % emphasis_style(), '</span>')
-        chars = '<pre style="%s">sbc</pre>' % emphasis_style()
+            f'<span style="{emphasis_style()}">', '</span>')
+        chars = f'<pre style="{emphasis_style()}">sbc</pre>'
         help_text = _('''<p>Quickly choose a Virtual library by typing in just a few characters from the library name into the field above.
         For example, if want to choose the VL:
         {example}
@@ -573,14 +590,16 @@ class SearchRestrictionMixin:
         dex = 0
         def add_action(current_menu, name, last):
             nonlocal dex
+            def compare_fix_amps(name1, name2):
+                return (self._trim_restriction_name(name1).replace('&&', '&') ==
+                        self._trim_restriction_name(name2).replace('&&', '&'))
             self.search_restriction.addItem(name)
             txt = self._trim_restriction_name(last)
-            if self._trim_restriction_name(name) == self._trim_restriction_name(current_restriction):
+            if compare_fix_amps(name, current_restriction):
                 a = current_menu.addAction(self.checked, txt if txt else self.no_restriction)
             else:
                 a = current_menu.addAction(txt if txt else self.no_restriction)
-            a.triggered.connect(partial(self.search_restriction_triggered,
-                                        action=a, index=dex))
+            a.triggered.connect(partial(self.search_restriction_triggered, action=a, index=dex))
             dex += 1
             return a
 
@@ -632,12 +651,11 @@ class SearchRestrictionMixin:
         if i == 1:
             self.apply_text_search_restriction(str(self.search.currentText()))
         elif i == 2 and str(self.search_restriction.currentText()).startswith('*'):
-            self.apply_text_search_restriction(
-                                str(self.search_restriction.currentText())[1:])
+            self.apply_text_search_restriction(str(self.search_restriction.currentText())[1:])
         else:
-            r = str(self.search_restriction.currentText())
+            r = str(self.search_restriction.currentText()).replace('&&', '&')
             if r is not None and r != '':
-                restriction = 'search:"%s"'%(r)
+                restriction = f'search:"{r}"'
             else:
                 restriction = ''
             self._apply_search_restriction(restriction, r)

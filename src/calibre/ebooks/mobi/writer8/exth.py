@@ -6,13 +6,13 @@ __copyright__ = '2012, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
 import re
-from struct import pack
 from io import BytesIO
+from struct import pack
 
-from calibre.constants import iswindows, ismacos
-from calibre.ebooks.mobi.utils import (utf8_text, to_base)
-from calibre.utils.localization import lang_as_iso639_1
+from calibre.constants import ismacos, iswindows
 from calibre.ebooks.metadata import authors_to_sort_string
+from calibre.ebooks.mobi.utils import to_base, utf8_text
+from calibre.utils.localization import lang_as_iso639_1
 from polyglot.builtins import iteritems
 
 EXTH_CODES = {
@@ -142,7 +142,7 @@ def build_exth(metadata, prefer_author_sort=False, is_periodical=False,
         datestr = str(metadata['timestamp'][0])
 
     if datestr is None:
-        raise ValueError("missing date or timestamp")
+        raise ValueError('missing date or timestamp')
 
     datestr = datestr.encode('utf-8')
     exth.write(pack(b'>II', EXTH_CODES['pubdate'], len(datestr) + 8))
@@ -178,7 +178,7 @@ def build_exth(metadata, prefer_author_sort=False, is_periodical=False,
     if thumbnail_offset is not None:
         exth.write(pack(b'>III', EXTH_CODES['thumboffset'], 12,
             thumbnail_offset))
-        thumbnail_uri_str = ('kindle:embed:%s' %(to_base(thumbnail_offset, base=32, min_num_digits=4))).encode('utf-8')
+        thumbnail_uri_str = (f'kindle:embed:{to_base(thumbnail_offset, base=32, min_num_digits=4)}').encode('utf-8')
         exth.write(pack(b'>II', EXTH_CODES['kf8_thumbnail_uri'], len(thumbnail_uri_str) + 8))
         exth.write(thumbnail_uri_str)
         nrecs += 2

@@ -28,6 +28,22 @@ def available_translations():
     return _available_translations
 
 
+default_envvars_for_langcode = ('LANGUAGE', 'LC_ALL', 'LC_CTYPE', 'LC_MESSAGES', 'LANG')
+
+
+def getlangcode_from_envvars(envvars=default_envvars_for_langcode):
+    lookup = os.environ.get
+    for k in envvars:
+        localename = lookup(k)
+        if localename:
+            if k == 'LANGUAGE':
+                localename = localename.split(':')[0]
+            break
+    else:
+        localename = 'C'
+    return locale._parse_localename(localename)[0]
+
+
 def get_system_locale():
     from calibre.constants import ismacos, iswindows
     lang = None
@@ -50,13 +66,12 @@ def get_system_locale():
             traceback.print_exc()
     if lang is None:
         try:
-            envvars = ['LANGUAGE', 'LC_ALL', 'LC_CTYPE', 'LC_MESSAGES', 'LANG']
-            lang = locale.getdefaultlocale(envvars)[0]
+            lang = getlangcode_from_envvars()
 
             # lang is None in two cases: either the environment variable is not
             # set or it's "C". Stop looking for a language in the latter case.
             if lang is None:
-                for var in envvars:
+                for var in default_envvars_for_langcode:
                     if os.environ.get(var) == 'C':
                         lang = 'en_US'
                         break
@@ -75,7 +90,7 @@ def get_system_locale():
 
 def sanitize_lang(lang):
     if lang:
-        match = re.match('[a-z]{2,3}(_[A-Z]{2}){0,1}', lang)
+        match = re.match(r'[a-z]{2,3}(_[A-Z]{2}){0,1}', lang)
         if match:
             lang = match.group()
     if lang == 'zh':
@@ -148,8 +163,7 @@ def get_single_translator(mpath, which='messages'):
             traceback.print_exc()
             import hashlib
             sig = hashlib.sha1(data).hexdigest()
-            raise ValueError('Failed to load translations for: {} (size: {} and signature: {}) with error: {}'.format(
-                path, len(data), sig, e))
+            raise ValueError(f'Failed to load translations for: {path} (size: {len(data)} and signature: {sig}) with error: {e}')
 
 
 def get_iso639_translator(lang):
@@ -203,7 +217,7 @@ def load_po(path):
     try:
         make(path, buf)
     except Exception:
-        print(('Failed to compile translations file: %s, ignoring') % path)
+        print(f'Failed to compile translations file: {path}, ignoring')
         buf = None
     else:
         buf = io.BytesIO(buf.getvalue())
@@ -325,13 +339,13 @@ set_translators.lang = None
 
 _iso639 = None
 _extra_lang_codes = {
-        'pt_BR' : _('Brazilian Portuguese'),
-        'zh_CN' : _('Simplified Chinese'),
-        'zh_TW' : _('Traditional Chinese'),
-        'bn_IN' : _('Indian Bengali'),
-        'bn_BD' : _('Bangladeshi Bengali'),
-        'en'    : _('English'),
-        'und'   : _('Unknown')
+        'pt_BR': _('Brazilian Portuguese'),
+        'zh_CN': _('Simplified Chinese'),
+        'zh_TW': _('Traditional Chinese'),
+        'bn_IN': _('Indian Bengali'),
+        'bn_BD': _('Bangladeshi Bengali'),
+        'en'   : _('English'),
+        'und'  : _('Unknown')
         }
 
 if False:
@@ -490,6 +504,13 @@ def lang_map_for_ui():
     return ans
 
 
+def reverse_lang_map_for_ui():
+    ans = getattr(reverse_lang_map_for_ui, 'ans', None)
+    if ans is None:
+        ans = reverse_lang_map_for_ui.ans = {v: k for k, v in lang_map_for_ui().items()}
+    return ans
+
+
 def langnames_to_langcodes(names):
     '''
     Given a list of localized language names return a mapping of the names to 3
@@ -527,7 +548,10 @@ def get_udc():
     global _udc
     if _udc is None:
         from calibre.ebooks.unihandecode import Unihandecoder
-        _udc = Unihandecoder(lang=get_lang())
+        from calibre.utils.config_base import tweaks
+        lang = tweaks.get('east_asian_base_language', '')
+        lang = lang if lang in ('ja', 'kr', 'vn', 'zh') else get_lang()
+        _udc = Unihandecoder(lang=lang)
     return _udc
 
 
@@ -559,7 +583,7 @@ def localize_user_manual_link(url):
         return url
     from polyglot.urllib import urlparse, urlunparse
     parts = urlparse(url)
-    path = re.sub(r'/generated/[a-z]+/', '/generated/%s/' % lc, parts.path or '')
+    path = re.sub(r'/generated/[a-z]+/', f'/generated/{lc}/', parts.path or '')
     path = f'/{lc}{path}'
     parts = list(parts)
     parts[2] = path
@@ -588,3 +612,9 @@ def localize_website_link(url):
     parts = list(parts)
     parts[2] = path
     return urlunparse(parts)
+
+
+def is_rtl_lang(lang):
+    lang = canonicalize_lang(lang)
+    # Aramaic, Arabic, Azeri, Hebrew, Dhivehi, Sorani, Urdu, Farsi
+    return lang and lang in ('ara', 'heb', 'aze', 'div', 'arc', 'syc', 'myz', 'ckb', 'urd', 'fas')

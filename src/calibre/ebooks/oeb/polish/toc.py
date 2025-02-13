@@ -8,15 +8,13 @@ __docformat__ = 'restructuredtext en'
 import re
 from collections import Counter, OrderedDict
 from functools import partial
-from lxml import etree
-from lxml.builder import ElementMaker
 from operator import itemgetter
 
+from lxml import etree
+from lxml.builder import ElementMaker
+
 from calibre import __version__
-from calibre.ebooks.oeb.base import (
-    EPUB_NS, NCX, NCX_NS, OEB_DOCS, XHTML, XHTML_NS, XML, XML_NS, XPath, serialize,
-    uuid_id, xml2text,
-)
+from calibre.ebooks.oeb.base import EPUB_NS, NCX, NCX_NS, OEB_DOCS, XHTML, XHTML_NS, XML, XML_NS, XPath, serialize, uuid_id, xml2text
 from calibre.ebooks.oeb.polish.errors import MalformedMarkup
 from calibre.ebooks.oeb.polish.opf import get_book_language, set_guide_item
 from calibre.ebooks.oeb.polish.pretty import pretty_html_tree, pretty_xml_tree
@@ -95,7 +93,7 @@ class TOC:
 
     @property
     def depth(self):
-        """The maximum depth of the navigation tree rooted at this node."""
+        '''The maximum depth of the navigation tree rooted at this node.'''
         try:
             return max(node.depth for node in self) + 1
         except ValueError:
@@ -107,7 +105,7 @@ class TOC:
 
     def get_lines(self, lvl=0):
         frag = ('#'+self.frag) if self.frag else ''
-        ans = [('\t'*lvl) + 'TOC: %s --> %s%s'%(self.title, self.dest, frag)]
+        ans = [('\t'*lvl) + f'TOC: {self.title} --> {self.dest}{frag}']
         for child in self:
             ans.extend(child.get_lines(lvl+1))
         return ans
@@ -134,7 +132,7 @@ class TOC:
 
 
 def child_xpath(tag, name):
-    return tag.xpath('./*[calibre:lower-case(local-name()) = "%s"]'%name)
+    return tag.xpath(f'./*[calibre:lower-case(local-name()) = "{name}"]')
 
 
 def add_from_navpoint(container, navpoint, parent, ncx_name):
@@ -221,18 +219,33 @@ def parse_nav(container, nav_name):
     root = container.parsed(nav_name)
     toc_root = TOC()
     toc_root.lang = toc_root.uid = None
-    et = '{%s}type' % EPUB_NS
-    for nav in root.iterdescendants(XHTML('nav')):
-        if nav.get(et) == 'toc':
+    seen_toc = seen_pagelist = False
+    et = f'{{{EPUB_NS}}}type'
+    for nav in XPath('descendant::h:nav[@epub:type]')(root):
+        nt = nav.get(et)
+        if nt == 'toc' and not seen_toc:
             ol = first_child(nav, XHTML('ol'))
             if ol is not None:
+                seen_toc = True
                 process_nav_node(container, ol, toc_root, nav_name)
                 for h in nav.iterchildren(*map(XHTML, 'h1 h2 h3 h4 h5 h6'.split())):
                     text = etree.tostring(h, method='text', encoding='unicode', with_tail=False) or h.get('title')
                     if text:
                         toc_root.toc_title = text
                         break
-                break
+        elif nt == 'page-list' and not seen_pagelist:
+            ol = first_child(nav, XHTML('ol'))
+            if ol is not None and not seen_pagelist:
+                seen_pagelist = True
+                for li in ol.iterchildren(XHTML('li')):
+                    for a in li.iterchildren(XHTML('a')):
+                        href = a.get('href')
+                        if href:
+                            text = (etree.tostring(a, method='text', encoding='unicode', with_tail=False) or a.get('title')).strip()
+                            if text:
+                                dest = nav_name if href.startswith('#') else container.href_to_name(href, base=nav_name)
+                                frag = urlparse(href).fragment or None
+                                toc_root.page_list.append({'dest': dest, 'pagenum': text, 'frag': frag})
     return toc_root
 
 
@@ -324,7 +337,7 @@ def get_nav_landmarks(container):
     nav = find_existing_nav_toc(container)
     if nav and container.has_name(nav):
         root = container.parsed(nav)
-        et = '{%s}type' % EPUB_NS
+        et = f'{{{EPUB_NS}}}type'
         for elem in root.iterdescendants(XHTML('nav')):
             if elem.get(et) == 'landmarks':
                 for li in elem.iterdescendants(XHTML('li')):
@@ -609,7 +622,7 @@ def create_ncx(toc, to_href, btitle, lang, uid):
     def process_node(xml_parent, toc_parent):
         for child in toc_parent:
             play_order['c'] += 1
-            point = etree.SubElement(xml_parent, NCX('navPoint'), id='num_%d' % play_order['c'],
+            point = etree.SubElement(xml_parent, NCX('navPoint'), id=f"num_{play_order['c']}",
                             playOrder=str(play_order['c']))
             label = etree.SubElement(point, NCX('navLabel'))
             title = child.title
@@ -647,7 +660,7 @@ def commit_ncx_toc(container, toc, lang=None, uid=None):
         uid = uuid_id()
         eid = container.opf.get('unique-identifier', None)
         if eid:
-            m = container.opf_xpath('//*[@id="%s"]'%eid)
+            m = container.opf_xpath(f'//*[@id="{eid}"]')
             if m:
                 uid = xml2text(m[0])
 
@@ -664,7 +677,7 @@ def commit_ncx_toc(container, toc, lang=None, uid=None):
 
 
 def ensure_single_nav_of_type(root, ntype='toc'):
-    et = '{%s}type' % EPUB_NS
+    et = f'{{{EPUB_NS}}}type'
     navs = [n for n in root.iterdescendants(XHTML('nav')) if n.get(et) == ntype]
     for x in navs[1:]:
         extract(x)
@@ -678,7 +691,7 @@ def ensure_single_nav_of_type(root, ntype='toc'):
     else:
         nav = root.makeelement(XHTML('nav'))
         first_child(root, XHTML('body')).append(nav)
-    nav.set('{%s}type' % EPUB_NS, ntype)
+    nav.set(f'{{{EPUB_NS}}}type', ntype)
     return nav
 
 
@@ -703,7 +716,7 @@ def ensure_container_has_nav(container, lang=None, previous_nav=None):
     if lang:
         lang = lang_as_iso639_1(lang) or lang
         root.set('lang', lang)
-        root.set('{%s}lang' % XML_NS, lang)
+        root.set(f'{{{XML_NS}}}lang', lang)
     return tocname, root
 
 
@@ -734,7 +747,7 @@ def set_landmarks(container, root, tocname, landmarks):
     for entry in landmarks:
         if entry['type'] and container.has_name(entry['dest']) and container.mime_map[entry['dest']] in OEB_DOCS:
             a = create_nav_li(container, ol, entry, tocname)
-            a.set('{%s}type' % EPUB_NS, entry['type'])
+            a.set(f'{{{EPUB_NS}}}type', entry['type'])
             a.text = entry['title'] or None
     pretty_xml_tree(nav)
     collapse_li(nav)
@@ -840,7 +853,7 @@ def toc_to_html(toc, container, toc_name, title, lang=None):
         li.append(a)
         if len(toc) > 0:
             parent = li.makeelement(XHTML('ul'))
-            parent.set('class', 'level%d' % (style_level))
+            parent.set('class', f'level{style_level}')
             li.append(parent)
             a.tail = '\n\n' + (indent*(level+2))
             parent.text = '\n'+(indent*(level+3))
@@ -858,7 +871,7 @@ def toc_to_html(toc, container, toc_name, title, lang=None):
         E.body(
             E.h2(title),
             E.ul(),
-            id="calibre_generated_inline_toc",
+            id='calibre_generated_inline_toc',
         )
     )
 
@@ -896,7 +909,7 @@ def create_inline_toc(container, title=None):
         name, c = 'toc.xhtml', 0
         while container.has_name(name):
             c += 1
-            name = 'toc%d.xhtml' % c
+            name = f'toc{c}.xhtml'
         container.add_file(name, raw, spine_index=0)
     else:
         with container.open(name, 'wb') as f:

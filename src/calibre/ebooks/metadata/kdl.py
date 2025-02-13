@@ -5,19 +5,19 @@ __license__   = 'GPL v3'
 __copyright__ = '2011, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import re, socket
+import re
+import socket
 
 from mechanize import URLError
 
-from calibre.ebooks.metadata.book.base import Metadata
 from calibre import browser
 from calibre.ebooks.BeautifulSoup import BeautifulSoup
 from calibre.ebooks.chardet import xml_to_unicode
+from calibre.ebooks.metadata.book.base import Metadata
 from polyglot.builtins import codepoint_to_chr
 from polyglot.urllib import parse_qs, quote_plus
 
-URL = \
-"http://ww2.kdl.org/libcat/WhatsNext.asp?AuthorLastName={0}&AuthorFirstName=&SeriesName=&BookTitle={1}&CategoryID=0&cmdSearch=Search&Search=1&grouping="
+URL = 'http://ww2.kdl.org/libcat/WhatsNext.asp?AuthorLastName={0}&AuthorFirstName=&SeriesName=&BookTitle={1}&CategoryID=0&cmdSearch=Search&Search=1&grouping='
 
 _ignore_starts = '\'"'+''.join(codepoint_to_chr(x) for x in list(range(0x2018, 0x201e))+[0x2032, 0x2033])
 

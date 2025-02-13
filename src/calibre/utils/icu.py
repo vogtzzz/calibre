@@ -83,10 +83,7 @@ def collator(strength=None, numeric=None, ignore_alternate_chars=None, upper_fir
         if upper_first is not None:
             ans.upper_first = upper_first
         if ignore_alternate_chars is not None:
-            try:
-                ans.set_attribute(_icu.UCOL_ALTERNATE_HANDLING, _icu.UCOL_SHIFTED if ignore_alternate_chars else _icu.UCOL_NON_IGNORABLE)
-            except AttributeError:
-                pass  # people running from source without latest binary
+            ans.set_attribute(_icu.UCOL_ALTERNATE_HANDLING, _icu.UCOL_SHIFTED if ignore_alternate_chars else _icu.UCOL_NON_IGNORABLE)
 
     thread_local_collator_cache.cache[key] = ans
     return ans
@@ -280,7 +277,7 @@ def partition_by_first_letter(items, reverse=False, key=lambda x:x):
     # Build a list of 'equal' first letters by noticing changes
     # in ICU's 'ordinal' for the first letter.
     from collections import OrderedDict
-    items = sorted(items, key=lambda x:sort_key(key(x)), reverse=reverse)
+    items = sorted(items, key=lambda x: sort_key(key(x)), reverse=reverse)
     ans = OrderedDict()
     last_c, last_ordnum = ' ', 0
     for item in items:
@@ -318,8 +315,9 @@ def remove_accents_icu(txt: str) -> str:
 def remove_accents_regex(txt: str) -> str:
     pat = getattr(remove_accents_regex, 'pat', None)
     if pat is None:
-        import regex
         import unicodedata
+
+        import regex
         pat = regex.compile(r'\p{Mn}', flags=regex.UNICODE)
         setattr(remove_accents_regex, 'pat', pat)
         setattr(remove_accents_regex, 'normalize', unicodedata.normalize)

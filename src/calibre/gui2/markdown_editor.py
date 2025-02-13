@@ -2,12 +2,10 @@
 # License: GPLv3 Copyright: 2023, un_pogaz <un.pogaz@gmail.com>
 
 import os
-from qt.core import (
-    QDialog, QDialogButtonBox, QPlainTextEdit, QSize, Qt, QTabWidget, QUrl,
-    QVBoxLayout, QWidget, pyqtSignal,
-)
 
-from calibre.gui2 import safe_open_url, gprefs
+from qt.core import QDialog, QDialogButtonBox, QPlainTextEdit, QSize, Qt, QTabWidget, QUrl, QVBoxLayout, QWidget, pyqtSignal
+
+from calibre.gui2 import gprefs, safe_open_url
 from calibre.gui2.book_details import resolved_css
 from calibre.gui2.widgets2 import HTMLDisplay
 from calibre.library.comments import markdown as get_markdown
@@ -47,8 +45,8 @@ class MarkdownEditDialog(QDialog):
 
     def __init__(self, parent, text, column_name=None, base_url=None):
         QDialog.__init__(self, parent)
-        self.setObjectName("MarkdownEditDialog")
-        self.setWindowTitle(_("Edit Markdown"))
+        self.setObjectName('MarkdownEditDialog')
+        self.setWindowTitle(_('Edit Markdown'))
         self.verticalLayout = l = QVBoxLayout(self)
         self.textbox = editor = Editor(self)
         editor.set_base_url(base_url)
@@ -62,7 +60,7 @@ class MarkdownEditDialog(QDialog):
         self.setWindowFlags(self.windowFlags()&(~Qt.WindowType.WindowContextHelpButtonHint))
         self.setWindowIcon(icon)
 
-        self.textbox.markdown =text
+        self.textbox.markdown = text
         # self.textbox.wyswyg_dirtied()
 
         if column_name:

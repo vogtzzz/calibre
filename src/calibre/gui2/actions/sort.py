@@ -6,12 +6,24 @@ __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 
 from contextlib import suppress
 from functools import partial
+
 from qt.core import (
-    QAbstractItemView, QAction, QDialog, QDialogButtonBox, QIcon, QListWidget,
-    QListWidgetItem, QMenu, QSize, Qt, QToolButton, QVBoxLayout, pyqtSignal,
+    QAbstractItemView,
+    QAction,
+    QDialog,
+    QDialogButtonBox,
+    QIcon,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
+    QSize,
+    Qt,
+    QToolButton,
+    QVBoxLayout,
+    pyqtSignal,
 )
 
-from calibre.gui2.actions import InterfaceAction, show_menu_under_widget, toolbar_widgets_for_action
+from calibre.gui2.actions import InterfaceAction, show_menu_under_widget
 from calibre.library.field_metadata import category_icon_map
 from calibre.utils.icu import primary_sort_key
 from polyglot.builtins import iteritems
@@ -40,13 +52,15 @@ class SortByAction(InterfaceAction):
     name = 'Sort By'
     action_spec = (_('Sort by'), 'sort.png', _('Sort the list of books'), None)
     action_type = 'current'
-    popup_type = QToolButton.ToolButtonPopupMode.MenuButtonPopup
+    popup_type = QToolButton.ToolButtonPopupMode.InstantPopup
     action_add_menu = True
     dont_add_to = frozenset(('context-menu-cover-browser', ))
 
     def genesis(self):
         self.sorted_icon = QIcon.ic('ok.png')
-        self.qaction.triggered.connect(self.show_menu)
+        self.menu = m = self.qaction.menu()
+        m.aboutToShow.connect(self.about_to_show_menu)
+        # self.qaction.triggered.connect(self.show_menu)
 
         # Create a "hidden" menu that can have a shortcut. This also lets us
         # manually show the menu instead of letting Qt do it to work around a
@@ -66,13 +80,15 @@ class SortByAction(InterfaceAction):
             self.gui.addAction(ac)
             return ac
 
-        c('reverse_sort_action', _('Reverse current sort'), _('Reverse the current sort order'), self.reverse_sort, 'shift+f5')
-        c('reapply_sort_action', _('Re-apply current sort'), _('Re-apply the current sort'), self.reapply_sort, 'f5')
+        self.reverse_action = c('reverse_sort_action', _('Reverse current sort'),
+                                _('Reverse the current sort order'), self.reverse_sort, 'shift+f5')
+        self.reapply_action = c('reapply_sort_action', _('Re-apply current sort'),
+                                _('Re-apply the current sort'), self.reapply_sort, 'f5')
+
+    def about_to_show_menu(self):
+        self.update_menu()
 
     def show_menu(self):
-        # We manually show the menu instead of letting Qt do it to work around a
-        # problem where the menu can show on the wrong screen.
-        self.update_menu()
         show_menu_under_widget(self.gui, self.qaction.menu(), self.qaction, self.name)
 
     def reverse_sort(self):
@@ -91,12 +107,6 @@ class SortByAction(InterfaceAction):
 
     def initialization_complete(self):
         self.update_menu()
-        # Remove the down arrow from the buttons as they serve no purpose. They
-        # show exactly what clicking the button shows
-        for w in toolbar_widgets_for_action(self.gui, self.qaction):
-            # Not sure why both styles are necessary, but they are
-            w.setStyleSheet('QToolButton::menu-button {image: none; }'
-                            'QToolButton::menu-arrow {image: none; }')
 
     def update_menu(self, menu=None):
         menu = menu or self.qaction.menu()
@@ -110,6 +120,11 @@ class SortByAction(InterfaceAction):
         m = self.gui.library_view.model()
         db = self.gui.current_db
 
+        # Use these actions so we get the shortcut(s) displayed
+        menu.addAction(self.reapply_action)
+        menu.addAction(self.reverse_action)
+        menu.addSeparator()
+
         # Add saved sorts to the menu
         saved_sorts = db.new_api.pref('saved_multisort_specs', {})
         if saved_sorts:
@@ -119,9 +134,9 @@ class SortByAction(InterfaceAction):
 
         # Note the current sort column so it can be specially handled below
         try:
-            sort_col, order = m.sorted_on
+            sort_col = m.sorted_on[0]
         except TypeError:
-            sort_col, order = 'date', True
+            sort_col = 'date'
 
         # The operations to choose which columns to display and to create saved sorts
         menu.addAction(_('Select sortable columns')).triggered.connect(self.select_sortable_columns)
@@ -140,20 +155,11 @@ class SortByAction(InterfaceAction):
                 continue
             if key in hidden:
                 continue
-            ascending = None
-            if key == sort_col:
-                name = _('%s [reverse current sort]') % name
-                ascending = not order
-            sac = SortAction(name, key, ascending, menu)
+            sac = SortAction(name, key, None, menu)
             if key == sort_col:
                 sac.setIcon(self.sorted_icon)
             sac.sort_requested.connect(self.sort_requested)
-            if key == sort_col:
-                before = menu.actions()[0] if menu.actions() else None
-                menu.insertAction(before, sac)
-                menu.insertSeparator(before)
-            else:
-                menu.addAction(sac)
+            menu.addAction(sac)
 
     def select_sortable_columns(self):
         db = self.gui.current_db
