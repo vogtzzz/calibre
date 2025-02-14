@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from contextlib import closing
+
 from qt.core import QIcon, QObject, Qt, QTimer, pyqtSignal
 
 from calibre.constants import VIEWER_APP_UID, islinux
@@ -162,7 +163,7 @@ def run_gui(app, opts, args, internal_book_data, listener=None):
         listener.message_received.connect(main.message_from_other_instance, type=Qt.ConnectionType.QueuedConnection)
     QTimer.singleShot(0, acc.flush)
     if opts.raise_window:
-        main.raise_()
+        main.raise_and_focus()
     if opts.full_screen:
         main.set_full_screen(True)
 
@@ -201,9 +202,7 @@ def main(args=sys.argv):
     parser = option_parser()
     opts, args = parser.parse_args(args)
     oat = opts.open_at
-    if oat and not (
-            oat.startswith('toc:') or oat.startswith('toc-href:') or oat.startswith('toc-href-contains:') or
-            oat.startswith('epubcfi(/') or is_float(oat) or oat.startswith('ref:') or oat.startswith('search:') or oat.startswith('regex:')):
+    if oat and not (oat.startswith(('toc:', 'toc-href:', 'toc-href-contains:', 'epubcfi(/', 'ref:', 'search:', 'regex:')) or is_float(oat)):
         raise SystemExit(f'Not a valid --open-at value: {opts.open_at}')
 
     if not opts.new_instance and get_session_pref('singleinstance', False):

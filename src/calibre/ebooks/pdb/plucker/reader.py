@@ -5,14 +5,13 @@ __docformat__ = 'restructuredtext en'
 import os
 import struct
 import zlib
-
 from collections import OrderedDict
 
 from calibre import CurrentDir
-from calibre.ebooks.pdb.formatreader import FormatReader
 from calibre.ebooks.compression.palmdoc import decompress_doc
+from calibre.ebooks.pdb.formatreader import FormatReader
+from calibre.utils.img import Canvas, image_from_data, save_cover_data_to
 from calibre.utils.imghdr import identify
-from calibre.utils.img import save_cover_data_to, Canvas, image_from_data
 from polyglot.builtins import codepoint_to_chr
 
 DATATYPE_PHTML = 0
@@ -361,7 +360,7 @@ class Reader(FormatReader):
         with CurrentDir(output_dir):
             for uid, num in self.uid_text_secion_number.items():
                 self.log.debug(f'Writing record with uid: {uid} as {uid}.html')
-                with open('%s.html' % uid, 'wb') as htmlf:
+                with open(f'{uid}.html', 'wb') as htmlf:
                     html = '<html><body>'
                     section_header, section_data = self.sections[num]
                     if section_header.type == DATATYPE_PHTML:
@@ -391,13 +390,13 @@ class Reader(FormatReader):
                         elif self.header_record.compression == 2:
                             idata = zlib.decompress(section_data)
                     try:
-                        save_cover_data_to(idata, '%s.jpg' % uid, compression_quality=70)
+                        save_cover_data_to(idata, f'{uid}.jpg', compression_quality=70)
                         images.add(uid)
                         self.log.debug(f'Wrote image with uid {uid} to images/{uid}.jpg')
                     except Exception as e:
                         self.log.error(f'Failed to write image with uid {uid}: {e}')
                 else:
-                    self.log.error('Failed to write image with uid %s: No data.' % uid)
+                    self.log.error(f'Failed to write image with uid {uid}: No data.')
             # Composite images.
             # We're going to use the already compressed .jpg images here.
             for uid, num in self.uid_composite_image_section_number.items():
@@ -411,8 +410,8 @@ class Reader(FormatReader):
                         col_height = 0
                         for col in row:
                             if col not in images:
-                                raise Exception('Image with uid: %s missing.' % col)
-                            w, h = identify(open('%s.jpg' % col, 'rb'))[1:]
+                                raise Exception(f'Image with uid: {col} missing.')
+                            w, h = identify(open(f'{col}.jpg', 'rb'))[1:]
                             row_width += w
                             if col_height < h:
                                 col_height = h
@@ -427,14 +426,14 @@ class Reader(FormatReader):
                             x_off = 0
                             largest_height = 0
                             for col in row:
-                                im = image_from_data(open('%s.jpg' % col, 'rb').read())
+                                im = image_from_data(open(f'{col}.jpg', 'rb').read())
                                 canvas.compose(im, x_off, y_off)
                                 w, h = im.width(), im.height()
                                 x_off += w
                                 if largest_height < h:
                                     largest_height = h
                             y_off += largest_height
-                    with open('%s.jpg' % uid) as out:
+                    with open(f'{uid}.jpg') as out:
                         out.write(canvas.export(compression_quality=70))
                     self.log.debug(f'Wrote composite image with uid {uid} to images/{uid}.jpg')
                 except Exception as e:
@@ -459,7 +458,7 @@ class Reader(FormatReader):
         except:
             raise Exception('Could not determine home.html')
         # Generate oeb from html conversion.
-        oeb = html_input.convert(open('%s.html' % home_html, 'rb'), self.options, 'html', self.log, {})
+        oeb = html_input.convert(open(f'{home_html}.html', 'rb'), self.options, 'html', self.log, {})
         self.options.debug_pipeline = odi
 
         return oeb
@@ -485,7 +484,7 @@ class Reader(FormatReader):
         while offset < len(d):
             if not paragraph_open:
                 if need_set_p_id:
-                    html += '<p id="p%s">' % p_num
+                    html += f'<p id="p{p_num}">'
                     p_num += 1
                     need_set_p_id = False
                 else:
@@ -504,7 +503,7 @@ class Reader(FormatReader):
                     offset += 1
                     id = struct.unpack('>H', d[offset:offset+2])[0]
                     if id in self.uid_text_secion_number:
-                        html += '<a href="%s.html">' % id
+                        html += f'<a href="{id}.html">'
                         link_open = True
                     offset += 1
                 # Targeted page link begins
@@ -595,7 +594,7 @@ class Reader(FormatReader):
                 elif c == 0x1a:
                     offset += 1
                     uid = struct.unpack('>H', d[offset:offset+2])[0]
-                    html += '<img src="images/%s.jpg" />' % uid
+                    html += f'<img src="images/{uid}.jpg" />'
                     offset += 1
                 # Set margin
                 # 2 Bytes
@@ -641,7 +640,7 @@ class Reader(FormatReader):
                 elif c == 0x5c:
                     offset += 3
                     uid = struct.unpack('>H', d[offset:offset+2])[0]
-                    html += '<img src="images/%s.jpg" />' % uid
+                    html += f'<img src="images/{uid}.jpg" />'
                     offset += 1
                 # Underline text begins
                 # 0 Bytes

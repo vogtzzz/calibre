@@ -4,10 +4,23 @@
 
 import json
 from operator import itemgetter
+
 from qt.core import (
-    QAbstractItemView, QAction, QComboBox, QGridLayout, QHBoxLayout, QIcon,
-    QInputDialog, QItemSelectionModel, QLabel, QListWidget, QListWidgetItem,
-    QPushButton, Qt, QWidget, pyqtSignal,
+    QAbstractItemView,
+    QAction,
+    QComboBox,
+    QGridLayout,
+    QHBoxLayout,
+    QIcon,
+    QInputDialog,
+    QItemSelectionModel,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    Qt,
+    QWidget,
+    pyqtSignal,
 )
 
 from calibre.gui2 import choose_files, choose_save_file, error_dialog
@@ -108,7 +121,7 @@ class BookmarkManager(QWidget):
         l.addWidget(bl, 0, 0, 1, -1)
         bl.itemClicked.connect(self.item_activated)
         bl.bookmark_activated.connect(self.item_activated)
-        bl.changed.connect(lambda : self.edited.emit(self.get_bookmarks()))
+        bl.changed.connect(lambda: self.edited.emit(self.get_bookmarks()))
         bl.ac_edit.triggered.connect(self.edit_bookmark)
         bl.ac_delete.triggered.connect(self.delete_bookmark)
 

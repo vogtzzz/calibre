@@ -6,7 +6,9 @@ __copyright__ = '2015, Kovid Goyal <kovid at kovidgoyal.net>'
 
 # Support server pre-activation, such as with systemd's socket activation
 
-import socket, errno
+import errno
+import socket
+
 from calibre.constants import islinux
 
 
@@ -20,10 +22,10 @@ if islinux:
     import ctypes
 
     class SOCKADDR_NL(ctypes.Structure):
-        _fields_ = [("nl_family", ctypes.c_ushort),
-                    ("nl_pad",    ctypes.c_ushort),
-                    ("nl_pid",    ctypes.c_int),
-                    ("nl_groups", ctypes.c_int)]
+        _fields_ = [('nl_family', ctypes.c_ushort),
+                    ('nl_pad',    ctypes.c_ushort),
+                    ('nl_pid',    ctypes.c_int),
+                    ('nl_groups', ctypes.c_int)]
 
     def getsockfamily(fd):
         addr = SOCKADDR_NL(0, 0, 0, 0)
@@ -33,7 +35,8 @@ if islinux:
         return addr.nl_family
 
     try:
-        systemd = ctypes.CDLL(ctypes.util.find_library('systemd'))
+        from ctypes.util import find_library
+        systemd = ctypes.CDLL(find_library('systemd'))
         systemd.sd_listen_fds
     except Exception:
         pass
@@ -41,7 +44,7 @@ if islinux:
         del pre_activated_socket
         has_preactivated_support = True
 
-        def pre_activated_socket():  # noqa
+        def pre_activated_socket():
             num = systemd.sd_listen_fds(1)  # Remove systemd env vars so that child processes do not inherit them
             if num > 1:
                 raise OSError('Too many file descriptors received from systemd')

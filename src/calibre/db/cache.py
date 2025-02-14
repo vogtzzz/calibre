@@ -14,42 +14,42 @@ import sys
 import traceback
 import weakref
 from collections import defaultdict
-from collections.abc import MutableSet, Set
+from collections.abc import Iterable, MutableSet, Set
 from functools import partial, wraps
 from io import DEFAULT_BUFFER_SIZE, BytesIO
 from queue import Queue
 from threading import Lock
-from time import monotonic, sleep, time
-from typing import NamedTuple, Tuple
+from time import mktime, monotonic, sleep, time
+from typing import NamedTuple
 
 from calibre import as_unicode, detect_ncpus, isbytestring
 from calibre.constants import iswindows, preferred_encoding
-from calibre.customize.ui import (
-    run_plugins_on_import, run_plugins_on_postadd, run_plugins_on_postdelete,
-    run_plugins_on_postimport,
-)
+from calibre.customize.ui import run_plugins_on_import, run_plugins_on_postadd, run_plugins_on_postdelete, run_plugins_on_postimport
 from calibre.db import SPOOL_SIZE, _get_next_series_num_for_list
 from calibre.db.annotations import merge_annotations
 from calibre.db.categories import get_categories
+from calibre.db.constants import COVER_FILE_NAME, DATA_DIR_NAME, NOTES_DIR_NAME
 from calibre.db.errors import NoSuchBook, NoSuchFormat
 from calibre.db.fields import IDENTITY, InvalidLinkTable, create_field
 from calibre.db.lazy import FormatMetadata, FormatsList, ProxyMetadata
 from calibre.db.listeners import EventDispatcher, EventType
-from calibre.db.locking import (
-    DowngradeLockError, LockingError, SafeReadLock, create_locks, try_lock,
-)
+from calibre.db.locking import DowngradeLockError, LockingError, SafeReadLock, create_locks, try_lock
+from calibre.db.notes.connect import copy_marked_up_text
 from calibre.db.search import Search
 from calibre.db.tables import VirtualTable
 from calibre.db.utils import type_safe_sort_key_function
 from calibre.db.write import get_series_values, uniq
 from calibre.ebooks import check_ebook_format
-from calibre.ebooks.metadata import author_to_author_sort, string_to_authors
+from calibre.ebooks.metadata import author_to_author_sort, string_to_authors, title_sort
 from calibre.ebooks.metadata.book.base import Metadata
 from calibre.ebooks.metadata.opf2 import metadata_to_opf
 from calibre.ptempfile import PersistentTemporaryFile, SpooledTemporaryFile, base_dir
 from calibre.utils.config import prefs, tweaks
-from calibre.utils.date import UNDEFINED_DATE, now as nowf, utcnow
-from calibre.utils.icu import lower as icu_lower, sort_key
+from calibre.utils.date import UNDEFINED_DATE, is_date_undefined, timestampfromdt, utcnow
+from calibre.utils.date import now as nowf
+from calibre.utils.filenames import make_long_path_useable
+from calibre.utils.icu import lower as icu_lower
+from calibre.utils.icu import sort_key
 from calibre.utils.localization import canonicalize_lang
 from polyglot.builtins import cmp, iteritems, itervalues, string_or_bytes
 
@@ -135,7 +135,6 @@ dynamic_category_preferences = frozenset({'grouped_search_make_user_categories',
 
 
 class Cache:
-
     '''
     An in-memory cache of the metadata.db file from a calibre library.
     This class also serves as a threadsafe API for accessing the database.
@@ -152,8 +151,10 @@ class Cache:
         self.shutting_down = False
         self.is_doing_rebuild_or_vacuum = False
         self.backend = backend
-        self.library_database_instance = (None if library_database_instance is None else
-                                          weakref.ref(library_database_instance))
+        # We want templates to have access to LibraryDatabase if we have it,
+        # otherwise this instance (Cache)
+        self.database_instance = (weakref.ref(self) if library_database_instance is None else
+                                  weakref.ref(library_database_instance))
         self.event_dispatcher = EventDispatcher()
         self.fields = {}
         self.composites = {}
@@ -391,19 +392,16 @@ class Cache:
             default_value={}))
         mi.application_id = book_id
         mi.id = book_id
-        composites = []
         for key, meta in self.field_metadata.custom_iteritems():
             mi.set_user_metadata(key, meta)
-            if meta['datatype'] == 'composite':
-                composites.append(key)
-            else:
+            if meta['datatype'] != 'composite':
+                # composites are evaluated on demand in metadata.book.base
+                # because their value is None
                 val = self._field_for(key, book_id)
                 if isinstance(val, tuple):
                     val = list(val)
                 extra = self._field_for(key+'_index', book_id)
                 mi.set(key, val=val, extra=extra)
-        for key in composites:
-            mi.set(key, val=self._composite_for(key, book_id, mi))
 
         mi.link_maps = self._get_all_link_maps_for_book(book_id)
 
@@ -436,13 +434,12 @@ class Cache:
 
             for field, table in iteritems(self.backend.tables):
                 self.fields[field] = create_field(field, table, bools_are_tristate,
-                                          self.backend.get_template_functions)
+                                                  self.backend.get_template_functions, self.database_instance)
                 if table.metadata['datatype'] == 'composite':
                     self.composites[field] = self.fields[field]
 
-            self.fields['ondevice'] = create_field('ondevice',
-                    VirtualTable('ondevice'), bools_are_tristate,
-                    self.backend.get_template_functions)
+            self.fields['ondevice'] = create_field('ondevice', VirtualTable('ondevice'), bools_are_tristate,
+                                                   self.backend.get_template_functions, self.database_instance)
 
             for name, field in iteritems(self.fields):
                 if name[0] == '#' and name.endswith('_index'):
@@ -646,7 +643,7 @@ class Cache:
             self._fts_start_measuring_rate()
         return changed
 
-    @write_api  # we need to use write locking as SQLITE gives a locked table error is multiple FTS queries are made at the same time
+    @write_api  # we need to use write locking as SQLITE gives a locked table error if multiple FTS queries are made at the same time
     def fts_search(
         self,
         fts_engine_query,
@@ -670,6 +667,123 @@ class Cache:
             process_each_result=process_each_result,
         ))
 
+    # }}}
+
+    # Notes API {{{
+    @read_api
+    def notes_for(self, field, item_id) -> str:
+        ' Return the notes document or an empty string if not found '
+        return self.backend.notes_for(field, item_id)
+
+    @read_api
+    def notes_data_for(self, field, item_id) -> str:
+        ' Return all notes data as a dict or None if note does not exist '
+        return self.backend.notes_data_for(field, item_id)
+
+    @read_api
+    def get_all_items_that_have_notes(self, field_name=None) -> set[int] | dict[str, set[int]]:
+        ' Return all item_ids for items that have notes in the specified field or all fields if field_name is None '
+        return self.backend.get_all_items_that_have_notes(field_name)
+
+    @read_api
+    def field_supports_notes(self, field=None) -> bool:
+        ' Return True iff the specified field supports notes. If field is None return frozenset of all fields that support notes. '
+        if field is None:
+            return self.backend.notes.allowed_fields
+        return field in self.backend.notes.allowed_fields
+
+    @read_api
+    def items_with_notes_in_book(self, book_id: int) -> dict[str, dict[int, str]]:
+        ' Return a dict of field to items that have associated notes for that field for the specified book '
+        ans = {}
+        for k in self.backend.notes.allowed_fields:
+            try:
+                field = self.fields[k]
+            except KeyError:
+                continue
+            v = {}
+            for item_id in field.ids_for_book(book_id):
+                if self.backend.notes_for(k, item_id):
+                    v[item_id] = field.table.id_map[item_id]
+            if v:
+                ans[k] = v
+        return ans
+
+    @write_api
+    def set_notes_for(self, field, item_id, doc: str, searchable_text: str = copy_marked_up_text, resource_hashes=(), remove_unused_resources=False) -> int:
+        '''
+        Set the notes document. If the searchable text is different from the document, specify it as searchable_text. If the document
+        references resources their hashes must be present in resource_hashes. Set remove_unused_resources to True to cleanup unused
+        resources, note that updating a note automatically cleans up resources pertaining to that note anyway.
+        '''
+        return self.backend.set_notes_for(field, item_id, doc, searchable_text, resource_hashes, remove_unused_resources)
+
+    @write_api
+    def add_notes_resource(self, path_or_stream_or_data, name: str, mtime: float = None) -> int:
+        ' Add the specified resource so it can be referenced by notes and return its content hash '
+        return self.backend.add_notes_resource(path_or_stream_or_data, name, mtime)
+
+    @read_api
+    def get_notes_resource(self, resource_hash) -> dict | None:
+        ' Return a dict containing the resource data and name or None if no resource with the specified hash is found '
+        return self.backend.get_notes_resource(resource_hash)
+
+    @read_api
+    def notes_resources_used_by(self, field, item_id):
+        ' Return the set of resource hashes of all resources used by the note for the specified item '
+        return frozenset(self.backend.notes_resources_used_by(field, item_id))
+
+    @write_api
+    def unretire_note_for(self, field, item_id) -> int:
+        ' Unretire a previously retired note for the specified item. Notes are retired when an item is removed from the database '
+        return self.backend.unretire_note_for(field, item_id)
+
+    @read_api
+    def export_note(self, field, item_id) -> str:
+        ' Export the note as a single HTML document with embedded images as data: URLs '
+        return self.backend.export_note(field, item_id)
+
+    @write_api
+    def import_note(self, field, item_id, path_to_html_file, path_is_data=False):
+        ' Import a previously exported note or an arbitrary HTML file as the note for the specified item '
+        if path_is_data:
+            html = path_to_html_file
+            ctime = mtime = time()
+            basedir = base_dir()
+        else:
+            with open(path_to_html_file, 'rb') as f:
+                html = f.read()
+                st = os.stat(f.fileno())
+                ctime, mtime = st.st_ctime, st.st_mtime
+            basedir = os.path.dirname(os.path.abspath(path_to_html_file))
+        return self.backend.import_note(field, item_id, html, basedir, ctime, mtime)
+
+    @write_api  # we need to use write locking as SQLITE gives a locked table error if multiple FTS queries are made at the same time
+    def search_notes(
+        self,
+        fts_engine_query='',
+        use_stemming=True,
+        highlight_start=None,
+        highlight_end=None,
+        snippet_size=None,
+        restrict_to_fields=(),
+        return_text=True,
+        result_type=tuple,
+        process_each_result=None,
+        limit=None,
+    ):
+        ' Search the text of notes using an FTS index. If the query is empty return all notes. '
+        return result_type(self.backend.search_notes(
+            fts_engine_query,
+            use_stemming=use_stemming,
+            highlight_start=highlight_start,
+            highlight_end=highlight_end,
+            snippet_size=snippet_size,
+            return_text=return_text,
+            restrict_to_fields=restrict_to_fields,
+            process_each_result=process_each_result,
+            limit=limit,
+        ))
     # }}}
 
     # Cache Layer API {{{
@@ -802,7 +916,7 @@ class Cache:
         try:
             return frozenset(self.fields[field].table.id_map.values())
         except AttributeError:
-            raise ValueError('%s is not a many-one or many-many field' % field)
+            raise ValueError(f'{field} is not a many-one or many-many field')
 
     @read_api
     def get_usage_count_by_id(self, field):
@@ -811,7 +925,7 @@ class Cache:
         try:
             return {k:len(v) for k, v in iteritems(self.fields[field].table.col_book_map)}
         except AttributeError:
-            raise ValueError('%s is not a many-one or many-many field' % field)
+            raise ValueError(f'{field} is not a many-one or many-many field')
 
     @read_api
     def get_id_map(self, field):
@@ -823,7 +937,7 @@ class Cache:
         except AttributeError:
             if field == 'title':
                 return self.fields[field].table.book_col_map.copy()
-            raise ValueError('%s is not a many-one or many-many field' % field)
+            raise ValueError(f'{field} is not a many-one or many-many field')
 
     @read_api
     def get_item_name(self, field, item_id):
@@ -832,19 +946,30 @@ class Cache:
         return self.fields[field].table.id_map[item_id]
 
     @read_api
-    def get_item_id(self, field, item_name):
-        ' Return the item id for item_name (case-insensitive) or None if not found '
-        try:
-            rmap = {icu_lower(v) if isinstance(v, str) else v:k for k, v in iteritems(self.fields[field].table.id_map)}
-        except KeyError:
-            return None
-        return rmap.get(icu_lower(item_name) if isinstance(item_name, str) else item_name, None)
+    def get_item_id(self, field, item_name, case_sensitive=False):
+        ''' Return the item id for item_name or None if not found.
+        This function is very slow if doing lookups for multiple names use either get_item_ids() or get_item_name_map().
+        Similarly, case sensitive lookups are faster than case insensitive ones. '''
+        field = self.fields[field]
+        if hasattr(field, 'item_ids_for_names'):
+            d = field.item_ids_for_names(self.backend, (item_name,), case_sensitive)
+            for v in d.values():
+                return v
 
     @read_api
-    def get_item_ids(self, field, item_names):
-        ' Return the item id for item_name (case-insensitive) '
-        rmap = {icu_lower(v) if isinstance(v, str) else v:k for k, v in iteritems(self.fields[field].table.id_map)}
-        return {name:rmap.get(icu_lower(name) if isinstance(name, str) else name, None) for name in item_names}
+    def get_item_ids(self, field, item_names, case_sensitive=False):
+        ' Return a dict mapping item_name to the item id or None '
+        field = self.fields[field]
+        if hasattr(field, 'item_ids_for_names'):
+            return field.item_ids_for_names(self.backend, item_names, case_sensitive)
+        return dict.fromkeys(item_names)
+
+    @read_api
+    def get_item_name_map(self, field, normalize_func=None):
+        ' Return mapping of item values to ids '
+        if normalize_func is None:
+            return {v:k for k, v in self.fields[field].table.id_map.items()}
+        return {normalize_func(v):k for k, v in self.fields[field].table.id_map.items()}
 
     @read_api
     def author_data(self, author_ids=None):
@@ -867,7 +992,7 @@ class Cache:
             name = self.fields['formats'].format_fname(book_id, fmt)
             path = self._field_for('path', book_id).replace('/', os.sep)
         except:
-            raise NoSuchFormat('Record %d has no fmt: %s'%(book_id, fmt))
+            raise NoSuchFormat(f'Record {book_id} has no fmt: {fmt}')
         return self.backend.format_hash(book_id, fmt, name, path)
 
     @api
@@ -967,7 +1092,7 @@ class Cache:
                 # We can't clear the composite caches because a read lock is set.
                 # As a consequence the value of a composite column that calls
                 # virtual_libraries() might be wrong. Oh well. Log and keep running.
-                print('Couldn\'t get write lock after vls_for_books_cache was loaded', file=sys.stderr)
+                print("Couldn't get write lock after vls_for_books_cache was loaded", file=sys.stderr)
                 traceback.print_exc()
 
         if get_cover:
@@ -1008,6 +1133,7 @@ class Cache:
         if as_file:
             ret = SpooledTemporaryFile(SPOOL_SIZE)
             if not self.copy_cover_to(book_id, ret):
+                ret.close()
                 return
             ret.seek(0)
         elif as_path:
@@ -1031,12 +1157,12 @@ class Cache:
         return ret
 
     @read_api
-    def cover_or_cache(self, book_id, timestamp):
+    def cover_or_cache(self, book_id, timestamp, as_what='bytes'):
         try:
             path = self._field_for('path', book_id).replace('/', os.sep)
         except AttributeError:
             return False, None, None
-        return self.backend.cover_or_cache(path, timestamp)
+        return self.backend.cover_or_cache(path, timestamp, as_what)
 
     @read_api
     def cover_last_modified(self, book_id):
@@ -1096,7 +1222,7 @@ class Cache:
             name = self.fields['formats'].format_fname(book_id, fmt)
             path = self._field_for('path', book_id).replace('/', os.sep)
         except (KeyError, AttributeError):
-            raise NoSuchFormat('Record %d has no %s file'%(book_id, fmt))
+            raise NoSuchFormat(f'Record {book_id} has no {fmt} file')
 
         return self.backend.copy_format_to(book_id, fmt, name, path, dest,
                                                use_hardlink=use_hardlink, report_file_size=report_file_size)
@@ -1257,6 +1383,7 @@ class Cache:
             try:
                 self.copy_format_to(book_id, fmt, ret)
             except NoSuchFormat:
+                ret.close()
                 return None
             ret.seek(0)
             # Various bits of code try to use the name as the default
@@ -1272,6 +1399,16 @@ class Cache:
             ret = buf.getvalue()
 
         return ret
+
+    @read_api
+    def newly_added_book_ids(self, count=5, book_ids=None) -> list[int]:
+        ids_to_sort = self._all_book_ids(list) if book_ids is None else list(book_ids)
+        ids_to_sort.sort(reverse=True)
+        return ids_to_sort[:count]
+
+    @read_api
+    def size_stats(self) -> dict[str, int]:
+        return self.backend.size_stats()
 
     @read_api
     def multisort(self, fields, ids_to_sort=None, virtual_fields=None):
@@ -1405,12 +1542,13 @@ class Cache:
 
     @api
     def get_categories(self, sort='name', book_ids=None, already_fixed=None,
-                       first_letter_sort=False):
+                       first_letter_sort=False, uncollapsed_categories=None):
         ' Used internally to implement the Tag Browser '
         try:
             with self.safe_read_lock:
                 return get_categories(self, sort=sort, book_ids=book_ids,
-                                      first_letter_sort=first_letter_sort)
+                                      first_letter_sort=first_letter_sort,
+                                      uncollapsed_categories=uncollapsed_categories)
         except InvalidLinkTable as err:
             bad_field = err.field_name
             if bad_field == already_fixed:
@@ -1747,6 +1885,7 @@ class Cache:
 
                 val = mi.get('title_sort', None)
                 if (force_changes and val is not None) or not mi.is_null('title_sort'):
+
                     protected_set_field('sort', val)
 
                 # identifiers will always be replaced if force_changes is True
@@ -1816,7 +1955,7 @@ class Cache:
             # message in the GUI during the processing.
             npath = run_import_plugins(stream_or_path, fmt)
             fmt = os.path.splitext(npath)[-1].lower().replace('.', '').upper()
-            stream_or_path = open(npath, 'rb')
+            stream_or_path = open(make_long_path_useable(npath), 'rb')
             needs_close = True
             fmt = check_ebook_format(stream_or_path, fmt)
 
@@ -1831,15 +1970,16 @@ class Cache:
                 name = None
 
             if name and not replace:
+                if needs_close:
+                    stream_or_path.close()
                 return False
 
             if hasattr(stream_or_path, 'read'):
                 stream = stream_or_path
             else:
-                stream = open(stream_or_path, 'rb')
+                stream = open(make_long_path_useable(stream_or_path), 'rb')
                 needs_close = True
             try:
-                stream = stream_or_path if hasattr(stream_or_path, 'read') else open(stream_or_path, 'rb')
                 size, fname = self._do_add_format(book_id, fmt, stream, name)
             finally:
                 if needs_close:
@@ -1973,7 +2113,7 @@ class Cache:
 
     @read_api
     def has_id(self, book_id):
-        ' Return True iff the specified book_id exists in the db '''
+        ' Return True iff the specified book_id exists in the db '
         return book_id in self.fields['title'].table.book_col_map
 
     @write_api
@@ -1997,6 +2137,8 @@ class Cache:
             mi.authors = (_('Unknown'),)
         aus = mi.author_sort if not mi.is_null('author_sort') else self._author_sort_from_authors(mi.authors)
         mi.title = mi.title or _('Unknown')
+        if mi.is_null('title_sort'):
+            mi.title_sort = title_sort(mi.title, lang=mi.languages[0] if mi.languages else None)
         if isbytestring(aus):
             aus = aus.decode(preferred_encoding, 'replace')
         if isbytestring(mi.title):
@@ -2010,7 +2152,7 @@ class Cache:
         book_id = self.backend.last_insert_rowid()
         self.event_dispatcher(EventType.book_created, book_id)
 
-        mi.timestamp = utcnow() if mi.timestamp is None else mi.timestamp
+        mi.timestamp = utcnow() if (mi.timestamp is None or is_date_undefined(mi.timestamp)) else mi.timestamp
         mi.pubdate = UNDEFINED_DATE if mi.pubdate is None else mi.pubdate
         if cover is not None:
             mi.cover, mi.cover_data = None, (None, cover)
@@ -2111,7 +2253,6 @@ class Cache:
         :param change_index: When renaming in a series-like field also change the series_index values.
         :param restrict_to_book_ids: An optional set of book ids for which the rename is to be performed, defaults to all books.
         '''
-
         f = self.fields[field]
         affected_books = set()
         try:
@@ -2178,10 +2319,10 @@ class Cache:
         try:
             func = f.table.rename_item
         except AttributeError:
-            raise ValueError('Cannot rename items for one-one fields: %s' % field)
+            raise ValueError(f'Cannot rename items for one-one fields: {field}')
         moved_books = set()
         id_map = {}
-        for item_id, new_name in iteritems(item_id_to_new_name_map):
+        for item_id, new_name in item_id_to_new_name_map.items():
             new_names = tuple(x.strip() for x in new_name.split(sv)) if sv else (new_name,)
             books, new_id = func(item_id, new_names[0], self.backend)
             affected_books.update(books)
@@ -2233,7 +2374,7 @@ class Cache:
         removed. '''
         missing = frozenset(val_map) - self._all_book_ids()
         if missing:
-            raise ValueError('add_custom_book_data: no such book_ids: %d'%missing)
+            raise ValueError(f'add_custom_book_data: no such book_ids: {missing}')
         self.backend.add_custom_data(name, val_map, delete_first)
 
     @read_api
@@ -2392,7 +2533,21 @@ class Cache:
             raise ValueError(f"Lookup name {for_field} doesn't have a link map")
         lm = table.link_map
         vm = table.id_map
-        return {vm.get(fid):v for fid,v in lm.items() if v}
+        ans = {vm.get(fid):v for fid,v in lm.items() if v}
+        ans.pop(None, None)
+        return ans
+
+    @read_api
+    def link_for(self, field, item_id):
+        '''
+        Return the link, if any, for the specified item or None if no link is found
+        '''
+        f = self.fields.get(field)
+        if f is not None:
+            table = f.table
+            lm = getattr(table, 'link_map', None)
+            if lm is not None:
+                return lm.get(item_id)
 
     @read_api
     def get_all_link_maps_for_book(self, book_id):
@@ -2550,7 +2705,7 @@ class Cache:
         if mi.authors:
             try:
                 quathors = mi.authors[:20]  # Too many authors causes parsing of the search expression to fail
-                query = ' and '.join('authors:"=%s"'%(a.replace('"', '')) for a in quathors)
+                query = ' and '.join('authors:"={}"'.format(a.replace('"', '')) for a in quathors)
                 qauthors = mi.authors[20:]
             except ValueError:
                 return identical_book_ids
@@ -2637,10 +2792,10 @@ class Cache:
         return self.backend.dump_and_restore(callback=callback, sql=sql)
 
     @write_api
-    def vacuum(self, include_fts_db=False):
+    def vacuum(self, include_fts_db=False, include_notes_db=True):
         self.is_doing_rebuild_or_vacuum = True
         try:
-            self.backend.vacuum(include_fts_db)
+            self.backend.vacuum(include_fts_db, include_notes_db)
         finally:
             self.is_doing_rebuild_or_vacuum = False
 
@@ -2958,12 +3113,18 @@ class Cache:
         from polyglot.binary import as_hex_unicode
         key_prefix = as_hex_unicode(library_key)
         book_ids = self._all_book_ids()
-        total = len(book_ids) + 1
+        total = len(book_ids) + 2
         has_fts = self.is_fts_enabled()
         if has_fts:
             total += 1
-        if progress is not None:
-            progress('metadata.db', 0, total)
+        poff = 0
+        def report_progress(fname):
+            nonlocal poff
+            if progress is not None:
+                progress(fname, poff, total)
+            poff += 1
+
+        report_progress('metadata.db')
         pt = PersistentTemporaryFile('-export.db')
         pt.close()
         self.backend.backup_database(pt.name)
@@ -2971,39 +3132,46 @@ class Cache:
         with open(pt.name, 'rb') as f:
             exporter.add_file(f, dbkey)
         os.remove(pt.name)
-        poff = 1
         if has_fts:
-            poff += 1
-            if progress is not None:
-                progress('full-text-search.db', 1, total)
+            report_progress('full-text-search.db')
             pt = PersistentTemporaryFile('-export.db')
             pt.close()
             self.backend.backup_fts_database(pt.name)
-            ftsdbkey = key_prefix + ':::' + 'full-text-search.db'
+            ftsdbkey = key_prefix + ':::full-text-search.db'
             with open(pt.name, 'rb') as f:
                 exporter.add_file(f, ftsdbkey)
             os.remove(pt.name)
+        notesdbkey = key_prefix + ':::notes.db'
+        with PersistentTemporaryFile('-export.db') as pt:
+            self.backend.export_notes_data(pt)
+            pt.flush()
+            pt.seek(0)
+            report_progress('notes.db')
+            exporter.add_file(pt, notesdbkey)
 
         format_metadata = {}
         extra_files = {}
-        metadata = {'format_data':format_metadata, 'metadata.db':dbkey, 'total':total, 'extra_files': extra_files}
+        metadata = {'format_data':format_metadata, 'metadata.db':dbkey, 'notes.db': notesdbkey, 'total':total, 'extra_files': extra_files}
         if has_fts:
             metadata['full-text-search.db'] = ftsdbkey
         for i, book_id in enumerate(book_ids):
             if abort is not None and abort.is_set():
                 return
             if progress is not None:
-                progress(self._field_for('title', book_id), i + poff, total)
+                report_progress(self._field_for('title', book_id))
             format_metadata[book_id] = fm = {}
             for fmt in self._formats(book_id):
                 mdata = self.format_metadata(book_id, fmt)
                 key = f'{key_prefix}:{book_id}:{fmt}'
                 fm[fmt] = key
-                with exporter.start_file(key, mtime=mdata.get('mtime')) as dest:
-                    self._copy_format_to(book_id, fmt, dest, report_file_size=dest.ensure_space)
+                mtime = mdata.get('mtime')
+                if mtime is not None:
+                    mtime = timestampfromdt(mtime)
+                with exporter.start_file(key, mtime=mtime) as dest:
+                    self._copy_format_to(book_id, fmt, dest)
             cover_key = '{}:{}:{}'.format(key_prefix, book_id, '.cover')
             with exporter.start_file(cover_key) as dest:
-                if not self.copy_cover_to(book_id, dest, report_file_size=dest.ensure_space):
+                if not self.copy_cover_to(book_id, dest):
                     dest.discard()
                 else:
                     fm['.cover'] = cover_key
@@ -3021,6 +3189,9 @@ class Cache:
 
     @read_api
     def annotations_map_for_book(self, book_id, fmt, user_type='local', user='viewer'):
+        '''
+        Return a map of annotation type -> annotation data for the specified book_id, format, user and user_type.
+        '''
         ans = {}
         for annot in self.backend.annotations_for_book(book_id, fmt, user_type, user):
             ans.setdefault(annot['type'], []).append(annot)
@@ -3028,22 +3199,40 @@ class Cache:
 
     @read_api
     def all_annotations_for_book(self, book_id):
+        '''
+        Return a tuple containing all annotations for the specified book_id as a dict with keys:
+        `format`, `user_type`, `user`, `annotation`. Here, annotation is the annotation data.
+        '''
         return tuple(self.backend.all_annotations_for_book(book_id))
 
     @read_api
     def annotation_count_for_book(self, book_id):
+        '''
+        Return the number of annotations for the specified book available in the database.
+        '''
         return self.backend.annotation_count_for_book(book_id)
 
     @read_api
     def all_annotation_users(self):
+        '''
+        Return a tuple of all (user_type, user name) that have annotations.
+        '''
         return tuple(self.backend.all_annotation_users())
 
     @read_api
     def all_annotation_types(self):
+        '''
+        Return a tuple of all annotation types in the database.
+        '''
         return tuple(self.backend.all_annotation_types())
 
     @read_api
     def all_annotations(self, restrict_to_user=None, limit=None, annotation_type=None, ignore_removed=False, restrict_to_book_ids=None):
+        '''
+        Return a tuple of all annotations matching the specified criteria.
+        `ignore_removed` controls whether removed (deleted) annotations are also returned. Removed annotations are just a skeleton
+        used for merging of annotations.
+        '''
         return tuple(self.backend.all_annotations(restrict_to_user, limit, annotation_type, ignore_removed, restrict_to_book_ids))
 
     @read_api
@@ -3059,6 +3248,9 @@ class Cache:
         restrict_to_user=None,
         ignore_removed=False
     ):
+        '''
+        Return of a tuple of annotations matching the specified Full-text query.
+        '''
         return tuple(self.backend.search_annotations(
             fts_engine_query, use_stemming, highlight_start, highlight_end,
             snippet_size, annotation_type, restrict_to_book_ids, restrict_to_user,
@@ -3067,10 +3259,16 @@ class Cache:
 
     @write_api
     def delete_annotations(self, annot_ids):
+        '''
+        Delete annotations with the specified ids.
+        '''
         self.backend.delete_annotations(annot_ids)
 
     @write_api
     def update_annotations(self, annot_id_map):
+        '''
+        Update annotations.
+        '''
         self.backend.update_annotations(annot_id_map)
 
     @write_api
@@ -3088,10 +3286,16 @@ class Cache:
 
     @write_api
     def set_annotations_for_book(self, book_id, fmt, annots_list, user_type='local', user='viewer'):
+        '''
+        Set all annotations for the specified book_id, fmt, user_type and user.
+        '''
         self.backend.set_annotations_for_book(book_id, fmt, annots_list, user_type, user)
 
     @write_api
     def merge_annotations_for_book(self, book_id, fmt, annots_list, user_type='local', user='viewer'):
+        '''
+        Merge the specified annotations into the existing annotations for book_id, fm, user_type, and user.
+        '''
         from calibre.utils.date import EPOCH
         from calibre.utils.iso8601 import parse_iso8601
         amap = self._annotations_map_for_book(book_id, fmt, user_type=user_type, user=user)
@@ -3153,8 +3357,19 @@ class Cache:
         self._clear_extra_files_cache(dest_id)
         return added
 
+    @write_api
+    def remove_extra_files(self, book_id: int, relpaths: Iterable[str], permanent=False) -> dict[str, Exception | None]:
+        '''
+        Delete the specified extra files, either to Recycle Bin or permanently.
+        '''
+        path = self._field_for('path', book_id)
+        if path:
+            self._clear_extra_files_cache(book_id)
+            return self.backend.remove_extra_files(path, relpaths, permanent)
+        return dict.fromkeys(relpaths)
+
     @read_api
-    def list_extra_files(self, book_id, use_cache=False, pattern='') -> Tuple[ExtraFile, ...]:
+    def list_extra_files(self, book_id, use_cache=False, pattern='') -> tuple[ExtraFile, ...]:
         '''
         Get information about extra files in the book's directory.
 
@@ -3185,12 +3400,13 @@ class Cache:
         self.backend.copy_extra_file_to(book_id, path, relpath, stream_or_path)
 
     @write_api
-    def merge_book_metadata(self, dest_id, src_ids, replace_cover=False):
+    def merge_book_metadata(self, dest_id, src_ids, replace_cover=False, save_alternate_cover=False):
         dest_mi = self.get_metadata(dest_id)
         merged_identifiers = self._field_for('identifiers', dest_id) or {}
         orig_dest_comments = dest_mi.comments
         dest_cover = orig_dest_cover = self.cover(dest_id)
         had_orig_cover = bool(dest_cover)
+        alternate_covers = []
         from calibre.utils.date import is_date_undefined
 
         def is_null_date(x):
@@ -3218,8 +3434,14 @@ class Cache:
             if not dest_cover or replace_cover:
                 src_cover = self.cover(src_id)
                 if src_cover:
+                    if save_alternate_cover and dest_cover:
+                        alternate_covers.append(dest_cover)
                     dest_cover = src_cover
                     replace_cover = False
+            elif save_alternate_cover:
+                src_cover = self.cover(src_id)
+                if src_cover:
+                    alternate_covers.append(src_cover)
             if not dest_mi.publisher:
                 dest_mi.publisher = src_mi.publisher
             if not dest_mi.rating:
@@ -3230,7 +3452,7 @@ class Cache:
             if is_null_date(dest_mi.pubdate) and not is_null_date(src_mi.pubdate):
                 dest_mi.pubdate = src_mi.pubdate
 
-            src_identifiers = self.field_for('identifier', src_id) or {}
+            src_identifiers = (src_mi.get_identifiers() or {}).copy()
             src_identifiers.update(merged_identifiers)
             merged_identifiers = src_identifiers.copy()
 
@@ -3240,6 +3462,17 @@ class Cache:
 
         if dest_cover and (not had_orig_cover or dest_cover is not orig_dest_cover):
             self._set_cover({dest_id: dest_cover})
+        if alternate_covers:
+            existing = {x[0] for x in self._list_extra_files(dest_id)}
+            h, ext = os.path.splitext(COVER_FILE_NAME)
+            template = f'{DATA_DIR_NAME}/{h}-{{:03d}}{ext}'
+            for cdata in alternate_covers:
+                for i in range(1, 1000):
+                    q = template.format(i)
+                    if q not in existing:
+                        existing.add(q)
+                        self._add_extra_files(dest_id, {q: BytesIO(cdata)}, replace=False, auto_rename=True)
+                        break
 
         for key in self.field_metadata:  # loop thru all defined fields
             fm = self.field_metadata[key]
@@ -3280,31 +3513,49 @@ class Cache:
                         dest_value.extend(src_value)
                     self._set_field(field, {dest_id: dest_value})
 
+
 def import_library(library_key, importer, library_path, progress=None, abort=None):
     from calibre.db.backend import DB
     metadata = importer.metadata[library_key]
     total = metadata['total']
-    poff = 1
-    if progress is not None:
-        progress('metadata.db', 0, total)
+    poff = 0
+    def report_progress(fname):
+        nonlocal poff
+        if progress is not None:
+            progress(fname, poff, total)
+            poff += 1
+    report_progress('metadata.db')
     if abort is not None and abort.is_set():
         return
-    with open(os.path.join(library_path, 'metadata.db'), 'wb') as f:
-        src = importer.start_file(metadata['metadata.db'], 'metadata.db for ' + library_path)
-        shutil.copyfileobj(src, f)
-        src.close()
+    importer.save_file(metadata['metadata.db'], 'metadata.db for ' + library_path, os.path.join(library_path, 'metadata.db'))
     if 'full-text-search.db' in metadata:
         if progress is not None:
             progress('full-text-search.db', 1, total)
         if abort is not None and abort.is_set():
             return
         poff += 1
-        with open(os.path.join(library_path, 'full-text-search.db'), 'wb') as f:
-            src = importer.start_file(metadata['full-text-search.db'], 'full-text-search.db for ' + library_path)
-            shutil.copyfileobj(src, f)
-            src.close()
+        importer.save_file(metadata['full-text-search.db'], 'full-text-search.db for ' + library_path,
+                           os.path.join(library_path, 'full-text-search.db'))
+    if abort is not None and abort.is_set():
+        return
+    if 'notes.db' in metadata:
+        import zipfile
+        notes_dir = os.path.join(library_path, NOTES_DIR_NAME)
+        os.makedirs(notes_dir, exist_ok=True)
+        with importer.start_file(metadata['notes.db'], 'notes.db for ' + library_path) as stream:
+            stream.check_hash = False
+            with zipfile.ZipFile(stream) as zf:
+                for zi in zf.infolist():
+                    tpath = zf._extract_member(zi, notes_dir, None)
+                    date_time = mktime(zi.date_time + (0, 0, -1))
+                    os.utime(tpath, (date_time, date_time))
+    if abort is not None and abort.is_set():
+        return
+    if importer.corrupted_files:
+        raise ValueError('Corrupted files:\n' + '\n'.join(importer.corrupted_files))
     cache = Cache(DB(library_path, load_user_formatter_functions=False))
     cache.init()
+
     format_data = {int(book_id):data for book_id, data in iteritems(metadata['format_data'])}
     extra_files = {int(book_id):data for book_id, data in metadata.get('extra_files', {}).items()}
     for i, (book_id, fmt_key_map) in enumerate(iteritems(format_data)):
@@ -3314,21 +3565,22 @@ def import_library(library_key, importer, library_path, progress=None, abort=Non
         if progress is not None:
             progress(title, i + poff, total)
         cache._update_path((book_id,), mark_as_dirtied=False)
-        for fmt, fmtkey in iteritems(fmt_key_map):
+        for fmt, fmtkey in fmt_key_map.items():
             if fmt == '.cover':
-                stream = importer.start_file(fmtkey, _('Cover for %s') % title)
-                path = cache._field_for('path', book_id).replace('/', os.sep)
-                cache.backend.set_cover(book_id, path, stream, no_processing=True)
+                with importer.start_file(fmtkey, _('Cover for %s') % title) as stream:
+                    path = cache._field_for('path', book_id).replace('/', os.sep)
+                    cache.backend.set_cover(book_id, path, stream, no_processing=True)
             else:
-                stream = importer.start_file(fmtkey, _('{0} format for {1}').format(fmt.upper(), title))
-                size, fname = cache._do_add_format(book_id, fmt, stream, mtime=stream.mtime)
-                cache.fields['formats'].table.update_fmt(book_id, fmt, fname, size, cache.backend)
-            stream.close()
+                with importer.start_file(fmtkey, _('{0} format for {1}').format(fmt.upper(), title)) as stream:
+                    size, fname = cache._do_add_format(book_id, fmt, stream, mtime=stream.mtime)
+                    cache.fields['formats'].table.update_fmt(book_id, fmt, fname, size, cache.backend)
         for relpath, efkey in extra_files.get(book_id, {}).items():
-            stream = importer.start_file(efkey, _('Extra file {0} for book {1}').format(relpath, title))
-            path = cache._field_for('path', book_id).replace('/', os.sep)
-            cache.backend.add_extra_file(relpath, stream, path)
+            with importer.start_file(efkey, _('Extra file {0} for book {1}').format(relpath, title)) as stream:
+                path = cache._field_for('path', book_id).replace('/', os.sep)
+                cache.backend.add_extra_file(relpath, stream, path)
         cache.dump_metadata({book_id})
+        if importer.corrupted_files:
+            raise ValueError('Corrupted files:\n' + '\n'.join(importer.corrupted_files))
     if progress is not None:
         progress(_('Completed'), total, total)
     return cache

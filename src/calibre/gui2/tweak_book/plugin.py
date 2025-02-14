@@ -6,6 +6,7 @@ __copyright__ = '2014, Kovid Goyal <kovid at kovidgoyal.net>'
 
 import importlib
 import sys
+
 from qt.core import QToolButton
 
 from calibre import prints
@@ -17,7 +18,6 @@ from polyglot.builtins import itervalues
 
 
 class Tool:
-
     '''
     The base class for individual tools in an Edit Book plugin. Useful members include:
 

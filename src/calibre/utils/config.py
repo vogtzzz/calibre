@@ -10,13 +10,25 @@ import optparse
 import os
 from copy import deepcopy
 
-from calibre.constants import (
-    CONFIG_DIR_MODE, __appname__, __author__, config_dir, get_version, iswindows,
-)
+from calibre.constants import CONFIG_DIR_MODE, __appname__, __author__, config_dir, get_version, iswindows
 from calibre.utils.config_base import (
-    Config, ConfigInterface, ConfigProxy, Option, OptionSet, OptionValues, StringConfig,
-    commit_data, from_json, json_dumps, json_loads, make_config_dir, plugin_dir, prefs,
-    read_data, to_json, tweaks,
+    Config,
+    ConfigInterface,
+    ConfigProxy,
+    Option,
+    OptionSet,
+    OptionValues,
+    StringConfig,
+    commit_data,
+    from_json,
+    json_dumps,
+    json_loads,
+    make_config_dir,
+    plugin_dir,
+    prefs,
+    read_data,
+    to_json,
+    tweaks,
 )
 from calibre.utils.localization import _
 from polyglot.builtins import native_string_type, string_or_bytes
@@ -27,7 +39,7 @@ optparse._ = _
 
 if False:
     # Make pyflakes happy
-    Config, ConfigProxy, Option, OptionValues, StringConfig, OptionSet,
+    Config, ConfigProxy, Option, OptionValues, StringConfig, OptionSet
     ConfigInterface, tweaks, plugin_dir, prefs, from_json, to_json, make_config_dir
 
 
@@ -47,8 +59,7 @@ class CustomHelpFormatter(optparse.IndentedHelpFormatter):
 
     def format_heading(self, heading):
         from calibre.utils.terminal import colored
-        return "%*s%s:\n" % (self.current_indent, '',
-                                 colored(heading, fg='blue', bold=True))
+        return  ' '*self.current_indent + '{}:\n'.format(colored(heading, fg='blue', bold=True))
 
     def format_option(self, option):
         import textwrap
@@ -59,12 +70,10 @@ class CustomHelpFormatter(optparse.IndentedHelpFormatter):
         opts = self.option_strings[option]
         opt_width = self.help_position - self.current_indent - 2
         if len(opts) > opt_width:
-            opts = "%*s%s\n" % (self.current_indent, "",
-                                    colored(opts, fg='green'))
+            opts = ' '*self.current_indent + '{}\n'.format(colored(opts, fg='green'))
             indent_first = self.help_position
         else:                       # start help on same line as opts
-            opts = "%*s%-*s  " % (self.current_indent, "", opt_width +
-                    len(colored('', fg='green')), colored(opts, fg='green'))
+            opts = ' '*self.current_indent + '%-*s  ' % (opt_width+len(colored('', fg='green')), colored(opts, fg='green'))  # noqa: UP031
             indent_first = 0
         result.append(opts)
         if option.help:
@@ -73,12 +82,11 @@ class CustomHelpFormatter(optparse.IndentedHelpFormatter):
 
             for line in help_text:
                 help_lines.extend(textwrap.wrap(line, self.help_width))
-            result.append("%*s%s\n" % (indent_first, "", help_lines[0]))
-            result.extend(["%*s%s\n" % (self.help_position, "", line)
-                           for line in help_lines[1:]])
-        elif opts[-1] != "\n":
-            result.append("\n")
-        return "".join(result)+'\n'
+            result.append(' '*indent_first + f'{help_lines[0]}')
+            result.extend([' '*self.help_position + f'{line}' for line in help_lines[1:]])
+        elif opts[-1] != '\n':
+            result.append('\n')
+        return ''.join(result)+'\n'
 
 
 class OptionParser(optparse.OptionParser):
@@ -99,17 +107,17 @@ class OptionParser(optparse.OptionParser):
             epilog = _('Created by ')+colored(__author__, fg='cyan')
         usage += '\n\n'+_('''Whenever you pass arguments to %prog that have spaces in them, '''
                           '''enclose the arguments in quotation marks. For example: "{}"''').format(
-                               "C:\\some path with spaces" if iswindows else '/some path/with spaces') +'\n'
+                               'C:\\some path with spaces' if iswindows else '/some path/with spaces') +'\n'
         if version is None:
-            version = '%%prog (%s %s)'%(__appname__, get_version())
+            version = f'%prog ({__appname__} {get_version()})'
         optparse.OptionParser.__init__(self, usage=usage, version=version, epilog=epilog,
                                formatter=CustomHelpFormatter(),
                                conflict_handler=conflict_handler, **kwds)
         self.gui_mode = gui_mode
         if False:
             # Translatable string from optparse
-            _("Options")
-            _("show this help message and exit")
+            _('Options')
+            _('show this help message and exit')
             _("show program's version number and exit")
 
     def print_usage(self, file=None):
@@ -249,8 +257,7 @@ class DynamicConfig(dict):
                 try:
                     d = json_loads(raw)
                 except Exception as err:
-                    print('Failed to de-serialize JSON representation of stored dynamic data for {} with error: {}'.format(
-                        self.name, err))
+                    print(f'Failed to de-serialize JSON representation of stored dynamic data for {self.name} with error: {err}')
             else:
                 d = self.read_old_serialized_representation()
                 migrate = bool(d)
@@ -290,7 +297,6 @@ dynamic = DynamicConfig()
 
 
 class XMLConfig(dict):
-
     '''
     Similar to :class:`DynamicConfig`, except that it uses an XML storage
     backend instead of a pickle file.

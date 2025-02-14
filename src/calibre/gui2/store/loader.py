@@ -5,17 +5,20 @@ __license__   = 'GPL v3'
 __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import sys, time, io, re
-from zlib import decompressobj
+import io
+import re
+import sys
+import time
 from collections import OrderedDict
 from threading import Thread
+from zlib import decompressobj
 
 from calibre import prints
-from calibre.constants import numeric_version, DEBUG
+from calibre.constants import DEBUG, numeric_version
 from calibre.gui2.store import StorePlugin
 from calibre.utils.config import JSONConfig
-from polyglot.urllib import urlencode
 from polyglot.builtins import iteritems, itervalues
+from polyglot.urllib import urlencode
 
 
 class VersionMismatch(ValueError):
@@ -29,7 +32,7 @@ def download_updates(ver_map={}, server='https://code.calibre-ebook.com'):
     from calibre.utils.https import get_https_resource_securely
     data = {k:str(v) for k, v in iteritems(ver_map)}
     data['ver'] = '1'
-    url = '%s/stores?%s'%(server, urlencode(data))
+    url = f'{server}/stores?{urlencode(data)}'
     # We use a timeout here to ensure the non-daemonic update thread does not
     # cause calibre to hang indefinitely during shutdown
     raw = get_https_resource_securely(url, timeout=90.0)
@@ -197,4 +200,4 @@ if __name__ == '__main__':
         print(name)
         print(code.encode('utf-8'))
         print('\n', '_'*80, '\n', sep='')
-    print('Time to download all %d plugins: %.2f seconds'%(count, time.time() - st))
+    print(f'Time to download all {count} plugins: {time.time() - st:.2f} seconds')

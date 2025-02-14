@@ -6,28 +6,43 @@ import json
 import time
 from collections import defaultdict
 from functools import partial
+from threading import Thread
+
 from qt.core import (
-    QAction, QApplication, QByteArray, QHBoxLayout, QIcon, QLabel, QMenu, QSize,
-    QSizePolicy, QStackedLayout, Qt, QTimer, QToolBar, QUrl, QVBoxLayout, QWidget,
+    QAction,
+    QApplication,
+    QByteArray,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QMenu,
+    QSize,
+    QSizePolicy,
+    QStackedLayout,
+    Qt,
+    QTimer,
+    QToolBar,
+    QUrl,
+    QVBoxLayout,
+    QWidget,
     pyqtSignal,
 )
 from qt.webengine import (
-    QWebEngineContextMenuRequest, QWebEnginePage, QWebEngineProfile, QWebEngineScript,
-    QWebEngineSettings, QWebEngineUrlRequestJob, QWebEngineUrlSchemeHandler,
+    QWebEngineContextMenuRequest,
+    QWebEnginePage,
+    QWebEngineProfile,
+    QWebEngineScript,
+    QWebEngineSettings,
+    QWebEngineUrlRequestJob,
+    QWebEngineUrlSchemeHandler,
     QWebEngineView,
 )
-from threading import Thread
 
 from calibre import prints
-from calibre.constants import (
-    FAKE_HOST, FAKE_PROTOCOL, __version__, is_running_from_develop, ismacos, iswindows,
-)
+from calibre.constants import FAKE_HOST, FAKE_PROTOCOL, __version__, is_running_from_develop, ismacos, iswindows
 from calibre.ebooks.oeb.base import OEB_DOCS, XHTML_MIME, serialize
 from calibre.ebooks.oeb.polish.parsing import parse
-from calibre.gui2 import (
-    NO_URL_FORMATTING, QT_HIDDEN_CLEAR_ACTION, error_dialog, is_dark_theme,
-    safe_open_url,
-)
+from calibre.gui2 import NO_URL_FORMATTING, QT_HIDDEN_CLEAR_ACTION, error_dialog, is_dark_theme, safe_open_url
 from calibre.gui2.palette import dark_color, dark_link_color, dark_text_color
 from calibre.gui2.tweak_book import TOP, actions, current_container, editors, tprefs
 from calibre.gui2.tweak_book.file_list import OpenWithHandler
@@ -36,10 +51,7 @@ from calibre.gui2.webengine import RestartingWebEngineView
 from calibre.gui2.widgets2 import HistoryLineEdit2
 from calibre.utils.ipc.simple_worker import offload_worker
 from calibre.utils.resources import get_path as P
-from calibre.utils.webengine import (
-    Bridge, create_script, from_js, insert_scripts, secure_webengine, setup_profile,
-    to_js,
-)
+from calibre.utils.webengine import Bridge, create_script, from_js, insert_scripts, secure_webengine, setup_profile, to_js
 from polyglot.builtins import iteritems
 from polyglot.queue import Empty, Queue
 from polyglot.urllib import urlparse
@@ -53,8 +65,8 @@ def get_data(name):
         return editors[name].get_raw_data()
     return current_container().raw_data(name)
 
-# Parsing of html to add linenumbers {{{
 
+# Parsing of html to add linenumbers {{{
 
 def parse_html(raw):
     root = parse(raw, decoder=lambda x:x.decode('utf-8'), line_numbers=True, linenumber_attribute='data-lnum')
@@ -66,7 +78,7 @@ def parse_html(raw):
 
 class ParseItem:
 
-    __slots__ = ('name', 'length', 'fingerprint', 'parsing_done', 'parsed_data')
+    __slots__ = ('fingerprint', 'length', 'name', 'parsed_data', 'parsing_done')
 
     def __init__(self, name):
         self.name = name
@@ -75,8 +87,9 @@ class ParseItem:
         self.parsing_done = False
 
     def __repr__(self):
-        return 'ParsedItem(name={!r}, length={!r}, fingerprint={!r}, parsing_done={!r}, parsed_data_is_None={!r})'.format(
-            self.name, self.length, self.fingerprint, self.parsing_done, self.parsed_data is None)
+        return (
+            f'ParsedItem(name={self.name!r}, length={self.length!r}, fingerprint={self.fingerprint!r}, '
+            f'parsing_done={self.parsing_done!r}, parsed_data_is_None={self.parsed_data is None!r})')
 
 
 class ParseWorker(Thread):
@@ -127,7 +140,7 @@ class ParseWorker(Thread):
                 pi.parsing_done = True
                 parsed_data = res['result']
                 if res['tb']:
-                    prints("Parser error:")
+                    prints('Parser error:')
                     prints(res['tb'])
                 else:
                     pi.parsed_data = parsed_data
@@ -163,8 +176,8 @@ class ParseWorker(Thread):
 parse_worker = ParseWorker()
 # }}}
 
-# Override network access to load data "live" from the editors {{{
 
+# Override network access to load data "live" from the editors {{{
 
 class UrlSchemeHandler(QWebEngineUrlSchemeHandler):
 
@@ -225,7 +238,6 @@ class UrlSchemeHandler(QWebEngineUrlSchemeHandler):
 
         if self.requests:
             return QTimer.singleShot(10, self.check_for_parse)
-
 
 # }}}
 
@@ -459,7 +471,7 @@ class WebView(RestartingWebEngineView, OpenWithHandler):
 
     def inspect(self):
         self.inspector.parent().show()
-        self.inspector.parent().raise_()
+        self.inspector.parent().raise_and_focus()
         self.pageAction(QWebEnginePage.WebAction.InspectElement).trigger()
 
     def contextMenuEvent(self, ev):
@@ -587,7 +599,7 @@ class Preview(QWidget):
         self.bar.addSeparator()
         self.bar.addWidget(self.search)
         for d in ('next', 'prev'):
-            ac = actions['find-%s-preview' % d]
+            ac = actions[f'find-{d}-preview']
             ac.triggered.connect(getattr(self, 'find_' + d))
             self.bar.addAction(ac)
 

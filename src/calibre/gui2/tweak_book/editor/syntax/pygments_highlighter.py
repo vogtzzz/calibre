@@ -7,11 +7,11 @@ __copyright__ = '2014, Kovid Goyal <kovid at kovidgoyal.net>'
 import numbers
 from functools import partial
 
+from pygments.lexer import Error, _TokenType
 from qt.core import QTextBlockUserData
-from pygments.lexer import _TokenType, Error
 
 from calibre.gui2.tweak_book.editor.syntax.base import SyntaxHighlighter
-from calibre.gui2.tweak_book.editor.syntax.utils import format_for_pygments_token, NULL_FMT
+from calibre.gui2.tweak_book.editor.syntax.utils import NULL_FMT, format_for_pygments_token
 
 NORMAL = 0
 
@@ -52,7 +52,7 @@ def create_lexer(base_class):
                         elif new_state == '#push':
                             statestack.append(statestack[-1])
                         else:
-                            assert False, "wrong state def: %r" % new_state
+                            assert False, f'wrong state def: {new_state!r}'
                         statetokens = tokendefs[statestack[-1]]
                     break
             else:
@@ -119,7 +119,7 @@ class State:
         return not self.__eq__(other)
 
     def __repr__(self):
-        return "PythonState(%r)" % self.pygments_stack
+        return f'PythonState({self.pygments_stack!r})'
     __str__ = __repr__
 
 

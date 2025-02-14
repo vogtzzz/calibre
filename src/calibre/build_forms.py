@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # License: GPL v3 Copyright: 2021, Kovid Goyal <kovid at kovidgoyal.net>
 
-import os
 import importlib
+import os
 
 
 def form_to_compiled_form(form):
@@ -39,6 +39,7 @@ def ensure_icons_built(resource_dir, force_compile, info):
 
 def build_forms(srcdir, info=None, summary=False, check_for_migration=False, check_icons=True):
     import re
+
     from qt.core import QT_VERSION_STR
     qt_major = QT_VERSION_STR.split('.')[0]
     m = importlib.import_module(f'PyQt{qt_major}.uic')
@@ -86,7 +87,7 @@ def build_forms(srcdir, info=None, summary=False, check_for_migration=False, che
             open(compiled_form, 'wb').write(dat)
             num += 1
     if num:
-        info('Compiled %d forms' % num)
+        info(f'Compiled {num} forms')
     if check_icons:
         resource_dir = os.path.join(os.path.dirname(srcdir), 'resources')
         ensure_icons_built(resource_dir, force_compile, info)

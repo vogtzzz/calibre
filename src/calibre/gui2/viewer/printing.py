@@ -5,17 +5,27 @@
 import os
 import subprocess
 import sys
-from qt.core import (
-    QCheckBox, QDialog, QDoubleSpinBox, QFormLayout, QHBoxLayout, QIcon, QLabel,
-    QLineEdit, QPageSize, QProgressDialog, QTimer, QToolButton, QVBoxLayout,
-)
 from threading import Thread
+
+from qt.core import (
+    QCheckBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QLineEdit,
+    QPageSize,
+    QProgressDialog,
+    QTimer,
+    QToolButton,
+    QVBoxLayout,
+)
 
 from calibre import sanitize_file_name
 from calibre.ebooks.conversion.plugins.pdf_output import PAPER_SIZES
-from calibre.gui2 import (
-    Application, choose_save_file, dynamic, elided_text, error_dialog, open_local_file,
-)
+from calibre.gui2 import Application, choose_save_file, dynamic, elided_text, error_dialog, open_local_file
 from calibre.gui2.widgets import PaperSizes
 from calibre.gui2.widgets2 import Dialog
 from calibre.ptempfile import PersistentTemporaryFile
@@ -74,9 +84,9 @@ class PrintDialog(Dialog):
             m = QDoubleSpinBox(self)
             m.setSuffix(' ' + _('inches'))
             m.setMinimum(0), m.setMaximum(3), m.setSingleStep(0.1)
-            val = vprefs.get('print-to-pdf-%s-margin' % edge, 1)
+            val = vprefs.get(f'print-to-pdf-{edge}-margin', 1)
             m.setValue(val)
-            setattr(self, '%s_margin' % edge, m)
+            setattr(self, f'{edge}_margin', m)
             l.addRow(tmap[edge], m)
         self.pnum = pnum = QCheckBox(_('Add page &number to printed pages'), self)
         pnum.setChecked(vprefs.get('print-to-pdf-page-numbers', True))
@@ -104,7 +114,7 @@ class PrintDialog(Dialog):
             'show_file':self.show_file.isChecked(),
         }
         for edge in 'left top right bottom'.split():
-            ans['margin_' + edge] = getattr(self, '%s_margin' % edge).value()
+            ans['margin_' + edge] = getattr(self, f'{edge}_margin').value()
         return ans
 
     def choose_file(self):
@@ -119,7 +129,7 @@ class PrintDialog(Dialog):
         vprefs['print-to-pdf-page-numbers'] = data['page_numbers']
         vprefs['print-to-pdf-show-file'] = data['show_file']
         for edge in 'left top right bottom'.split():
-            vprefs['print-to-pdf-%s-margin' % edge] = data['margin_' + edge]
+            vprefs[f'print-to-pdf-{edge}-margin'] = data['margin_' + edge]
 
     def accept(self):
         fname = self.file_name.text().strip()
@@ -178,7 +188,7 @@ def do_print():
     if data['page_numbers']:
         args.append('--pdf-page-numbers')
     for edge in 'left top right bottom'.split():
-        args.append('--pdf-page-margin-' + edge), args.append('%.1f' % (data['margin_' + edge] * 72))
+        args.append('--pdf-page-margin-' + edge), args.append('{:.1f}'.format(data['margin_' + edge] * 72))
     from calibre.ebooks.conversion.cli import main
     main(args)
 

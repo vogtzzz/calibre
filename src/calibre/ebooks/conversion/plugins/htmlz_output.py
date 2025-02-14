@@ -5,8 +5,7 @@ __docformat__ = 'restructuredtext en'
 import io
 import os
 
-from calibre.customize.conversion import OutputFormatPlugin, \
-    OptionRecommendation
+from calibre.customize.conversion import OptionRecommendation, OutputFormatPlugin
 from calibre.ptempfile import TemporaryDirectory
 
 
@@ -40,7 +39,7 @@ class HTMLZOutput(OutputFormatPlugin):
         OptionRecommendation(name='htmlz_class_style', recommended_value='external',
             level=OptionRecommendation.LOW,
             choices=list(ui_data['sheet_choices']),
-            help=_('How to handle the CSS when using css-type = \'class\'.\n'
+            help=_("How to handle the CSS when using css-type = 'class'.\n"
                    'Default is external.\n'
                    'external: {external}\n'
                    'inline: {inline}'
@@ -54,10 +53,11 @@ class HTMLZOutput(OutputFormatPlugin):
 
     def convert(self, oeb_book, output_path, input_plugin, opts, log):
         from lxml import etree
-        from calibre.ebooks.oeb.base import OEB_IMAGES, SVG_MIME
+
         from calibre.ebooks.metadata.opf2 import OPF, metadata_to_opf
-        from calibre.utils.zipfile import ZipFile
+        from calibre.ebooks.oeb.base import OEB_IMAGES, SVG_MIME
         from calibre.utils.filenames import ascii_filename
+        from calibre.utils.zipfile import ZipFile
 
         # HTML
         if opts.htmlz_css_type == 'inline':

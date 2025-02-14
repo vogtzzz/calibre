@@ -7,16 +7,15 @@ __docformat__ = 'restructuredtext en'
 
 from collections import Counter
 from functools import partial
+
 from qt.core import QDialog, QModelIndex, QObject, QTimer
 
 from calibre.constants import ismacos
 from calibre.gui2 import Aborted, error_dialog
-from calibre.gui2.actions import InterfaceAction
+from calibre.gui2.actions import InterfaceActionWithLibraryDrop
 from calibre.gui2.dialogs.confirm_delete import confirm
 from calibre.gui2.dialogs.confirm_delete_location import confirm_location
-from calibre.gui2.dialogs.delete_matching_from_device import (
-    DeleteMatchingFromDeviceDialog,
-)
+from calibre.gui2.dialogs.delete_matching_from_device import DeleteMatchingFromDeviceDialog
 from calibre.gui2.widgets import BusyCursor
 from calibre.gui2.widgets2 import MessagePopup
 from calibre.utils.localization import ngettext
@@ -47,7 +46,7 @@ class MultiDeleter(QObject):  # {{{
             self.cleanup()
             return
         id_ = self.ids.pop()
-        title = 'id:%d'%id_
+        title = f'id:{id_}'
         try:
             title_ = self.model.db.title(id_, index_is_id=True)
             if title_:
@@ -77,33 +76,13 @@ class MultiDeleter(QObject):  # {{{
 # }}}
 
 
-class DeleteAction(InterfaceAction):
+class DeleteAction(InterfaceActionWithLibraryDrop):
 
     name = 'Remove Books'
     action_spec = (_('Remove books'), 'remove_books.png', _('Delete books'), 'Backspace' if ismacos else 'Del')
     action_type = 'current'
     action_add_menu = True
     action_menu_clone_qaction = _('Remove selected books')
-
-    accepts_drops = True
-
-    def accept_enter_event(self, event, mime_data):
-        if mime_data.hasFormat("application/calibre+from_library"):
-            return True
-        return False
-
-    def accept_drag_move_event(self, event, mime_data):
-        if mime_data.hasFormat("application/calibre+from_library"):
-            return True
-        return False
-
-    def drop_event(self, event, mime_data):
-        mime = 'application/calibre+from_library'
-        if mime_data.hasFormat(mime):
-            self.dropped_ids = tuple(map(int, mime_data.data(mime).data().split()))
-            QTimer.singleShot(1, self.do_drop)
-            return True
-        return False
 
     def do_drop(self):
         book_ids = self.dropped_ids
@@ -142,15 +121,17 @@ class DeleteAction(InterfaceAction):
         for action in list(self.delete_menu.actions())[1:]:
             action.setEnabled(enabled)
 
-    def _get_selected_formats(self, msg, ids, exclude=False, single=False):
+    def _get_selected_formats(self, msg, ids, exclude=False, single=False, add_cover=False):
         from calibre.gui2.dialogs.select_formats import SelectFormats
         c = Counter()
         db = self.gui.library_view.model().db
-        for x in ids:
-            fmts_ = db.formats(x, index_is_id=True, verify_formats=False)
+        for book_id in ids:
+            fmts_ = db.formats(book_id, index_is_id=True, verify_formats=False)
             if fmts_:
                 for x in frozenset(x.lower() for x in fmts_.split(',')):
                     c[x] += 1
+            if add_cover and db.new_api.field_for('cover', book_id, default_value=False):
+                c['..cover..'] += 1
         d = SelectFormats(c, msg, parent=self.gui, exclude=exclude,
                 single=single)
         if d.exec() != QDialog.DialogCode.Accepted:
@@ -170,6 +151,7 @@ class DeleteAction(InterfaceAction):
         self.gui.library_view.model().refresh_ids(ids)
         self.gui.library_view.model().current_changed(self.gui.library_view.currentIndex(),
                 self.gui.library_view.currentIndex())
+        self.gui.tags_view.recount()
 
     def remove_format_by_id(self, book_id, fmt):
         title = self.gui.current_db.title(book_id, index_is_id=True)
@@ -435,7 +417,7 @@ class DeleteAction(InterfaceAction):
             if on_device:
                 loc = confirm_location('<p>' + _('Some of the selected books are on the attached device. '
                                             '<b>Where</b> do you want the selected files deleted from?'),
-                            self.gui)
+                            name='device-and-or-lib', parent=self.gui)
                 if not loc:
                     return
                 elif loc == 'dev':
@@ -456,7 +438,7 @@ class DeleteAction(InterfaceAction):
             try:
                 view.model().delete_books_by_id(to_delete_ids)
             except OSError as err:
-                err.locking_violation_msg = _('Could not change on-disk location of this book\'s files.')
+                err.locking_violation_msg = _("Could not change on-disk location of this book's files.")
                 raise
             self.library_ids_deleted2(to_delete_ids, next_id=next_id, can_undo=True)
         else:

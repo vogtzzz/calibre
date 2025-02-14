@@ -8,12 +8,13 @@ __docformat__ = 'restructuredtext en'
 import os
 import re
 import tempfile
+from contextlib import suppress
 from functools import partial
 from urllib.parse import quote
 
-from calibre.constants import isbsd, islinux, filesystem_encoding
+from calibre.constants import filesystem_encoding, isbsd, islinux
 from calibre.customize.conversion import InputFormatPlugin, OptionRecommendation
-from calibre.utils.filenames import ascii_filename, get_long_path_name
+from calibre.utils.filenames import ascii_filename, case_ignoring_open_file, get_long_path_name
 from calibre.utils.imghdr import what
 from calibre.utils.localization import __, get_lang
 from polyglot.builtins import as_unicode
@@ -121,18 +122,16 @@ class HTMLInput(InputFormatPlugin):
         return self._is_case_sensitive
 
     def create_oebbook(self, htmlpath, basedir, opts, log, mi):
-        import css_parser
         import logging
         import uuid
+
+        import css_parser
 
         from calibre import guess_type
         from calibre.ebooks.conversion.plumber import create_oebbook
         from calibre.ebooks.html.input import get_filelist
         from calibre.ebooks.metadata import string_to_authors
-        from calibre.ebooks.oeb.base import (
-            BINARY_MIME, OEB_STYLES, DirContainer, rewrite_links, urldefrag,
-            urlnormalize, urlquote, xpath,
-        )
+        from calibre.ebooks.oeb.base import BINARY_MIME, OEB_STYLES, DirContainer, rewrite_links, urldefrag, urlnormalize, urlquote, xpath
         from calibre.ebooks.oeb.transforms.metadata import meta_info_to_oeb_metadata
         from calibre.utils.localization import canonicalize_lang
         self.opts = opts
@@ -255,7 +254,7 @@ class HTMLInput(InputFormatPlugin):
             try:
                 link_ = link_.decode('utf-8', 'error')
             except:
-                self.log.warn('Failed to decode link %r. Ignoring'%link_)
+                self.log.warn(f'Failed to decode link {link_!r}. Ignoring')
                 return None, None
         if self.root_dir_for_absolute_links and link_.startswith('/'):
             link_ = link_.lstrip('/')
@@ -263,7 +262,7 @@ class HTMLInput(InputFormatPlugin):
         try:
             l = Link(link_, base if base else os.getcwd())
         except:
-            self.log.exception('Failed to process link: %r'%link_)
+            self.log.exception(f'Failed to process link: {link_!r}')
             return None, None
         if l.path is None:
             # Not a local resource
@@ -277,7 +276,7 @@ class HTMLInput(InputFormatPlugin):
         if not q.startswith(self.root_dir_of_input):
             if not self.opts.allow_local_files_outside_root:
                 if os.path.exists(q):
-                    self.log.warn('Not adding {} as it is outside the document root: {}'.format(q, self.root_dir_of_input))
+                    self.log.warn(f'Not adding {q} as it is outside the document root: {self.root_dir_of_input}')
                 return None, None
         return link, frag
 
@@ -293,7 +292,13 @@ class HTMLInput(InputFormatPlugin):
         except:
             return link_
         if not os.access(link, os.R_OK):
-            return link_
+            corrected = False
+            if getattr(self.opts, 'correct_case_mismatches', False):
+                with suppress(OSError), case_ignoring_open_file(link) as f:
+                    link = f.name
+                    corrected = True
+            if not corrected:
+                return link_
         if os.path.isdir(link):
             self.log.warn(link_, 'is a link to a directory. Ignoring.')
             return link_
@@ -306,7 +311,7 @@ class HTMLInput(InputFormatPlugin):
             bhref = os.path.basename(link)
             id, href = self.oeb.manifest.generate(id='added', href=sanitize_file_name(bhref))
             if media_type == 'text/plain':
-                self.log.warn('Ignoring link to text file %r'%link_)
+                self.log.warn(f'Ignoring link to text file {link_!r}')
                 return None
             if media_type == self.BINARY_MIME:
                 # Check for the common case, images

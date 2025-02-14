@@ -1,13 +1,13 @@
 ''' CHM File decoding support '''
 __license__ = 'GPL v3'
-__copyright__  = '2008, Kovid Goyal <kovid at kovidgoyal.net>,' \
-                 ' and Alex Bramley <a.bramley at gmail.com>.'
+__copyright__  = ('2008, Kovid Goyal <kovid at kovidgoyal.net>, '
+                  'and Alex Bramley <a.bramley at gmail.com>.')
 
 import os
 
+from calibre.constants import filesystem_encoding
 from calibre.customize.conversion import InputFormatPlugin
 from calibre.ptempfile import TemporaryDirectory
-from calibre.constants import filesystem_encoding
 from polyglot.builtins import as_bytes
 
 
@@ -23,14 +23,14 @@ class CHMInput(InputFormatPlugin):
         from calibre.ebooks.chm.reader import CHMReader
         log.debug('Opening CHM file')
         rdr = CHMReader(chm_path, log, input_encoding=self.opts.input_encoding)
-        log.debug('Extracting CHM to %s' % output_dir)
+        log.debug(f'Extracting CHM to {output_dir}')
         rdr.extract_content(output_dir, debug_dump=debug_dump)
         self._chm_reader = rdr
         return rdr.hhc_path
 
     def convert(self, stream, options, file_ext, log, accelerators):
-        from calibre.ebooks.chm.metadata import get_metadata_from_reader
         from calibre.customize.ui import plugin_for_input_format
+        from calibre.ebooks.chm.metadata import get_metadata_from_reader
         self.opts = options
 
         log.debug('Processing CHM...')
@@ -46,8 +46,8 @@ class CHMInput(InputFormatPlugin):
 
             # closing stream so CHM can be opened by external library
             stream.close()
-            log.debug('tdir=%s' % tdir)
-            log.debug('stream.name=%s' % stream.name)
+            log.debug(f'tdir={tdir}')
+            log.debug(f'stream.name={stream.name}')
             debug_dump = False
             odi = options.debug_pipeline
             if odi:
@@ -63,7 +63,6 @@ class CHMInput(InputFormatPlugin):
                 from calibre.ebooks.metadata.book.base import Metadata
                 metadata = Metadata(os.path.basename(chm_name))
             encoding = self._chm_reader.get_encoding() or options.input_encoding or 'cp1252'
-            self._chm_reader.CloseCHM()
             # print((tdir, mainpath))
             # from calibre import ipython
             # ipython()
@@ -74,6 +73,7 @@ class CHMInput(InputFormatPlugin):
             if os.path.abspath(mainpath) in self._chm_reader.re_encoded_files:
                 uenc = 'utf-8'
             htmlpath, toc = self._create_html_root(mainpath, log, uenc)
+            self._chm_reader.CloseCHM()
             oeb = self._create_oebbook_html(htmlpath, tdir, options, log, metadata)
             options.debug_pipeline = odi
             if toc.count() > 1:
@@ -102,6 +102,8 @@ class CHMInput(InputFormatPlugin):
         # use HTMLInput plugin to generate book
         from calibre.customize.builtins import HTMLInput
         opts.breadth_first = True
+        opts.max_levels = 30
+        opts.correct_case_mismatches = True
         htmlinput = HTMLInput(None)
         htmlinput.set_root_dir_of_input(basedir)
         htmlinput.root_dir_for_absolute_links = basedir
@@ -110,21 +112,27 @@ class CHMInput(InputFormatPlugin):
 
     def _create_html_root(self, hhcpath, log, encoding):
         from lxml import html
-        from polyglot.urllib import unquote as _unquote
-        from calibre.ebooks.oeb.base import urlquote
+
         from calibre.ebooks.chardet import xml_to_unicode
-        hhcdata = self._read_file(hhcpath)
+        from calibre.ebooks.oeb.base import urlquote
+        from polyglot.urllib import unquote as _unquote
+        try:
+            hhcdata = self._read_file(hhcpath)
+        except FileNotFoundError:
+            log.warn('No HHC file found in CHM, using the default topic as the first HTML file')
+            from calibre.ebooks.oeb.base import TOC
+            return os.path.join(os.path.dirname(hhcpath), self._chm_reader.relpath_to_first_html_file()), TOC()
         hhcdata = hhcdata.decode(encoding)
         hhcdata = xml_to_unicode(hhcdata, verbose=True,
                             strip_encoding_pats=True, resolve_entities=True)[0]
         hhcroot = html.fromstring(hhcdata)
         toc = self._process_nodes(hhcroot)
-        # print("=============================")
-        # print("Printing hhcroot")
+        # print('=============================')
+        # print('Printing hhcroot')
         # print(etree.tostring(hhcroot, pretty_print=True))
-        # print("=============================")
-        log.debug('Found %d section nodes' % toc.count())
-        htmlpath = os.path.splitext(hhcpath)[0] + ".html"
+        # print('=============================')
+        log.debug(f'Found {toc.count()} section nodes')
+        htmlpath = os.path.splitext(hhcpath)[0] + '.html'
         base = os.path.dirname(os.path.abspath(htmlpath))
 
         def unquote(x):
@@ -163,7 +171,7 @@ class CHMInput(InputFormatPlugin):
 
         with open(htmlpath, 'wb') as f:
             if toc.count() > 1:
-                from lxml.html.builder import HTML, BODY, DIV, A
+                from lxml.html.builder import BODY, DIV, HTML, A
                 path0 = toc[0].href
                 path0 = unquote_path(path0)[0]
                 subpath = os.path.dirname(path0)

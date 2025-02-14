@@ -11,17 +11,16 @@ from functools import partial
 
 from calibre.constants import preferred_encoding
 from calibre.ebooks.metadata import author_to_author_sort, title_sort
-from calibre.utils.date import (
-    UNDEFINED_DATE, is_date_undefined, isoformat, parse_date, parse_only_date,
-)
-from calibre.utils.icu import lower as icu_lower, strcmp
+from calibre.utils.date import UNDEFINED_DATE, is_date_undefined, isoformat, parse_date, parse_only_date
+from calibre.utils.icu import lower as icu_lower
+from calibre.utils.icu import strcmp
 from calibre.utils.localization import canonicalize_lang
 from polyglot.builtins import iteritems, itervalues
 
 missing = object()
 
-# Convert data into values suitable for the db {{{
 
+# Convert data into values suitable for the db {{{
 
 def sqlite_datetime(x):
     return isoformat(x, sep=' ') if isinstance(x, datetime) else x
@@ -41,16 +40,16 @@ series_index_pat = re.compile(r'(.*)\s+\[([.0-9]+)\]$')
 
 def get_series_values(val):
     if not val:
-        return (val, None)
+        return val, None
     match = series_index_pat.match(val.strip())
     if match is not None:
         idx = match.group(2)
         try:
             idx = float(idx)
-            return (match.group(1).strip(), idx)
+            return match.group(1).strip(), idx
         except:
             pass
-    return (val, None)
+    return val, None
 
 
 def multiple_text(sep, ui_sep, x):
@@ -130,7 +129,7 @@ def clean_identifier(typ, val):
 
 def adapt_identifiers(to_tuple, x):
     if not isinstance(x, dict):
-        x = {k:v for k, v in (y.partition(':')[0::2] for y in to_tuple(x))}
+        x = dict(y.partition(':')[0::2] for y in to_tuple(x))
     ans = {}
     for k, v in iteritems(x):
         k, v = clean_identifier(k, v)
@@ -191,8 +190,8 @@ def get_adapter(name, metadata):
     return ans
 # }}}
 
-# One-One fields {{{
 
+# One-One fields {{{
 
 def one_one_in_books(book_id_val_map, db, field, *args):
     'Set a one-one field in the books table'
@@ -205,7 +204,7 @@ def one_one_in_books(book_id_val_map, db, field, *args):
     if book_id_val_map:
         sequence = ((sqlite_datetime(v), k) for k, v in book_id_val_map.items())
         db.executemany(
-            'UPDATE books SET %s=? WHERE id=?'%field.metadata['column'], sequence)
+            'UPDATE books SET {}=? WHERE id=?'.format(field.metadata['column']), sequence)
         field.table.book_col_map.update(book_id_val_map)
     return set(book_id_val_map)
 
@@ -230,13 +229,13 @@ def one_one_in_other(book_id_val_map, db, field, *args):
     book_id_val_map = {k:v for k, v in iteritems(book_id_val_map) if v != g(k, missing)}
     deleted = tuple((k,) for k, v in iteritems(book_id_val_map) if v is None)
     if deleted:
-        db.executemany('DELETE FROM %s WHERE book=?'%field.metadata['table'],
+        db.executemany('DELETE FROM {} WHERE book=?'.format(field.metadata['table']),
                         deleted)
         for book_id in deleted:
             field.table.book_col_map.pop(book_id[0], None)
     updated = {k:v for k, v in iteritems(book_id_val_map) if v is not None}
     if updated:
-        db.executemany('INSERT OR REPLACE INTO %s(book,%s) VALUES (?,?)'%(
+        db.executemany('INSERT OR REPLACE INTO {}(book,{}) VALUES (?,?)'.format(
             field.metadata['table'], field.metadata['column']),
             ((k, sqlite_datetime(v)) for k, v in iteritems(updated)))
         field.table.book_col_map.update(updated)
@@ -261,13 +260,13 @@ def custom_series_index(book_id_val_map, db, field, *args):
             # sorts the same as other books with no series.
             field.table.remove_books((book_id,), db)
     if sequence:
-        db.executemany('UPDATE %s SET %s=? WHERE book=? AND value=?'%(
+        db.executemany('UPDATE {} SET {}=? WHERE book=? AND value=?'.format(
                 field.metadata['table'], field.metadata['column']), sequence)
     return {s[1] for s in sequence}
 # }}}
 
-# Many-One fields {{{
 
+# Many-One fields {{{
 
 def safe_lower(x):
     try:
@@ -288,7 +287,7 @@ def get_db_id(val, db, m, table, kmap, rid_map, allow_case_change,
             db.execute('INSERT INTO authors(name,sort) VALUES (?,?)',
                             (val.replace(',', '|'), aus))
         else:
-            db.execute('INSERT INTO %s(%s) VALUES (?)'%(
+            db.execute('INSERT INTO {}({}) VALUES (?)'.format(
                 m['table'], m['column']), (val,))
         item_id = rid_map[kval] = db.last_insert_rowid()
         table.id_map[item_id] = val
@@ -297,6 +296,8 @@ def get_db_id(val, db, m, table, kmap, rid_map, allow_case_change,
             table.asort_map[item_id] = aus
         if hasattr(table, 'link_map'):
             table.link_map[item_id] = ''
+        if table.supports_notes:
+            db.unretire_note(table.name, item_id, val)
     elif allow_case_change and val != table.id_map[item_id]:
         case_changes[item_id] = val
     val_map[val] = item_id
@@ -309,7 +310,7 @@ def change_case(case_changes, dirtied, db, table, m, is_authors=False):
     else:
         vals = ((val, item_id) for item_id, val in iteritems(case_changes))
     db.executemany(
-        'UPDATE %s SET %s=? WHERE id=?'%(m['table'], m['column']), vals)
+        'UPDATE {} SET {}=? WHERE id=?'.format(m['table'], m['column']), vals)
     for item_id, val in iteritems(case_changes):
         table.id_map[item_id] = val
         dirtied.update(table.col_book_map[item_id])
@@ -365,7 +366,7 @@ def many_one(book_id_val_map, db, field, allow_case_change, *args):
 
     # Update the db link table
     if deleted:
-        db.executemany('DELETE FROM %s WHERE book=?'%table.link_table,
+        db.executemany(f'DELETE FROM {table.link_table} WHERE book=?',
                             ((k,) for k in deleted))
     if updated:
         sql = (
@@ -378,10 +379,11 @@ def many_one(book_id_val_map, db, field, allow_case_change, *args):
                     iteritems(updated)))
 
     # Remove no longer used items
-    remove = {item_id for item_id in table.id_map if not
-              table.col_book_map.get(item_id, False)}
+    remove = {item_id:item_val for item_id, item_val in table.id_map.items() if not table.col_book_map.get(item_id, False)}
     if remove:
-        db.executemany('DELETE FROM %s WHERE id=?'%m['table'],
+        if table.supports_notes:
+            db.clear_notes_for_category_items(table.name, remove)
+        db.executemany('DELETE FROM {} WHERE id=?'.format(m['table']),
             ((item_id,) for item_id in remove))
         for item_id in remove:
             del table.id_map[item_id]
@@ -390,8 +392,8 @@ def many_one(book_id_val_map, db, field, allow_case_change, *args):
     return dirtied
 # }}}
 
-# Many-Many fields {{{
 
+# Many-Many fields {{{
 
 def uniq(vals, kmap=lambda x:x):
     ''' Remove all duplicates from vals, while preserving order. kmap must be a
@@ -465,14 +467,14 @@ def many_many(book_id_val_map, db, field, allow_case_change, *args):
 
     # Update the db link table
     if deleted:
-        db.executemany('DELETE FROM %s WHERE book=?'%table.link_table,
+        db.executemany(f'DELETE FROM {table.link_table} WHERE book=?',
                             ((k,) for k in deleted))
     if updated:
         vals = (
             (book_id, val) for book_id, vals in iteritems(updated)
             for val in vals
         )
-        db.executemany('DELETE FROM %s WHERE book=?'%table.link_table,
+        db.executemany(f'DELETE FROM {table.link_table} WHERE book=?',
                             ((k,) for k in updated))
         db.executemany('INSERT INTO {}(book,{}) VALUES(?, ?)'.format(
             table.link_table, m['link_column']), vals)
@@ -482,10 +484,11 @@ def many_many(book_id_val_map, db, field, allow_case_change, *args):
             field.author_sort_field.writer.set_books(aus_map, db)
 
     # Remove no longer used items
-    remove = {item_id for item_id in table.id_map if not
-              table.col_book_map.get(item_id, False)}
+    remove = {item_id:item_val for item_id, item_val in table.id_map.items() if not table.col_book_map.get(item_id, False)}
     if remove:
-        db.executemany('DELETE FROM %s WHERE id=?'%m['table'],
+        if table.supports_notes:
+            db.clear_notes_for_category_items(table.name, remove)
+        db.executemany('DELETE FROM {} WHERE id=?'.format(m['table']),
             ((item_id,) for item_id in remove))
         for item_id in remove:
             del table.id_map[item_id]
@@ -494,7 +497,6 @@ def many_many(book_id_val_map, db, field, allow_case_change, *args):
                 table.asort_map.pop(item_id, None)
             if hasattr(table, 'link_map'):
                 table.link_map.pop(item_id, None)
-
     return dirtied
 
 # }}}

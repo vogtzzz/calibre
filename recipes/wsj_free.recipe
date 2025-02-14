@@ -3,16 +3,18 @@
 # License: GPLv3 Copyright: 2016, Kovid Goyal <kovid at kovidgoyal.net>
 
 from __future__ import absolute_import, division, print_function, unicode_literals
+
 import json
 import random
 import time
 from base64 import standard_b64encode
 from datetime import date, timedelta
+
+from css_selectors import Select
 from mechanize import Request
 
 from calibre.ptempfile import PersistentTemporaryFile
 from calibre.web.feeds.news import BasicNewsRecipe
-from css_selectors import Select
 
 try:
     import urllib.parse as urlparse
@@ -26,6 +28,7 @@ except ImportError:
 
 needs_subscription = False
 
+
 class WSJ(BasicNewsRecipe):
 
     if needs_subscription:
@@ -33,8 +36,8 @@ class WSJ(BasicNewsRecipe):
     else:
         title = 'The Wall Street Journal (free)'
     __author__ = 'Kovid Goyal'
-    description = 'News and current affairs'
-    language = 'en'
+    description = 'Old code. Use WSJ recipes by unkn0wn'
+    language = 'en_US'
     masthead_url = 'https://s.wsj.net/media/wsj_amp_masthead_lg.png'
 
     compress_news_images = True
@@ -46,6 +49,7 @@ class WSJ(BasicNewsRecipe):
     remove_attributes = ['style','height','width']
     needs_subscription = needs_subscription
     WSJ_ITP = 'https://www.wsj.com/print-edition/today'
+    delay = 1
 
     storage = []
 
@@ -73,7 +77,7 @@ class WSJ(BasicNewsRecipe):
         dict(attrs={'data-spotim-app':'conversation'}),
         dict(name=['button', 'svg', 'old-script', 'video']),
         dict(attrs={'aria-label':[
-            'Sponsored Offers', 'Listen To Article', 'What to Read Next', 'Utility Bar', 
+            'Sponsored Offers', 'Listen To Article', 'What to Read Next', 'Utility Bar',
             'Conversation', 'List of Comments', 'Comment', 'JR More Articles'
         ]}),
         dict(attrs={'data-spot-im-class':['message-text', 'messages-list', 'message-view', 'conversation-root']}),
@@ -91,7 +95,9 @@ class WSJ(BasicNewsRecipe):
         try:
             br.open(url)
         except Exception as e:
-            url = e.hdrs.get('location')
+            hdrs_location = e.hdrs.get('location')
+            if hdrs_location:
+                url = e.hdrs.get('location')
         raw = read_url(self.storage, 'https://archive.is/latest/' + url)
         pt = PersistentTemporaryFile('.html')
         pt.write(raw.encode('utf-8'))
@@ -108,7 +114,7 @@ class WSJ(BasicNewsRecipe):
         for figc in soup.findAll('figcaption'):
             figc['id'] = 'big-top-caption'
         if name:= soup.find('h2', attrs={'itemprop':'name'}):
-                name.extract()
+            name.extract()
         for h2 in soup.findAll('h2'):
             if self.tag_to_string(h2).startswith(('What to Read Next', 'Conversation')):
                 h2.extract()
@@ -149,7 +155,7 @@ class WSJ(BasicNewsRecipe):
             # br.set_debug_http(True)
             res = br.open(start_url)
             sso_url = res.geturl()
-            query =  urlparse.parse_qs(urlparse.urlparse(sso_url).query)
+            query = urlparse.parse_qs(urlparse.urlparse(sso_url).query)
             query = {k:v[0] for k, v in query.items()}
             # pprint(query)
             request_query = {
@@ -175,7 +181,7 @@ class WSJ(BasicNewsRecipe):
             # you can get the version below from lib-min.js
             # search for: "\d+\.\d+\.\d+"
             # This might need to be updated in the future
-            auth0_client = json.dumps({"name": "auth0.js-ulp", "version": "9.11.3"})
+            auth0_client = json.dumps({'name': 'auth0.js-ulp', 'version': '9.11.3'})
             if not isinstance(auth0_client, bytes):
                 auth0_client = auth0_client.encode('utf-8')
             auth0_client = standard_b64encode(auth0_client)
@@ -255,7 +261,7 @@ class WSJ(BasicNewsRecipe):
             articles.append({'title': title, 'url': url,
                              'description': desc, 'date': ''})
             self.log('\tFound article:', title)
-            self.log('\t\t', desc + " " + url)
+            self.log('\t\t', desc + ' ' + url)
             if self.test and len(articles) >= self.test[1]:
                 break
 

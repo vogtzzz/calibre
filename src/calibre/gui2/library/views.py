@@ -9,30 +9,48 @@ import itertools
 import operator
 from collections import OrderedDict
 from functools import partial
+
 from qt.core import (
-    QAbstractItemView, QDialog, QDialogButtonBox, QDrag, QEvent, QFont, QFontMetrics,
-    QGridLayout, QHeaderView, QIcon, QItemSelection, QItemSelectionModel, QLabel, QMenu,
-    QMimeData, QModelIndex, QPoint, QPushButton, QSize, QSpinBox, QStyle,
-    QStyleOptionHeader, Qt, QTableView, QUrl, pyqtSignal,
+    QAbstractItemView,
+    QDialog,
+    QDialogButtonBox,
+    QDrag,
+    QEvent,
+    QFont,
+    QFontMetrics,
+    QGridLayout,
+    QHeaderView,
+    QIcon,
+    QItemSelection,
+    QItemSelectionModel,
+    QLabel,
+    QMenu,
+    QMimeData,
+    QModelIndex,
+    QPoint,
+    QPushButton,
+    QSize,
+    QSpinBox,
+    QStyle,
+    QStyleOptionHeader,
+    Qt,
+    QTableView,
+    QTimer,
+    QUrl,
+    pyqtSignal,
 )
 
 from calibre import force_unicode
 from calibre.constants import filesystem_encoding, islinux
-from calibre.gui2 import FunctionDispatcher, error_dialog, gprefs
+from calibre.gui2 import BOOK_DETAILS_DISPLAY_DEBOUNCE_DELAY, FunctionDispatcher, error_dialog, gprefs, show_restart_warning
 from calibre.gui2.dialogs.enum_values_edit import EnumValuesEdit
 from calibre.gui2.gestures import GestureManager
 from calibre.gui2.library import DEFAULT_SORT
-from calibre.gui2.library.alternate_views import (
-    AlternateViews, handle_enter_press, setup_dnd_interface,
-)
-from calibre.gui2.library.delegates import (
-    CcBoolDelegate, CcCommentsDelegate, CcDateDelegate, CcEnumDelegate,
-    CcLongTextDelegate, CcMarkdownDelegate, CcNumberDelegate, CcSeriesDelegate, CcTemplateDelegate,
-    CcTextDelegate, CompleteDelegate, DateDelegate, LanguagesDelegate, PubDateDelegate,
-    RatingDelegate, SeriesDelegate, TextDelegate,
-)
+from calibre.gui2.library.alternate_views import AlternateViews, setup_dnd_interface
+from calibre.gui2.library.delegates import TextDelegate
 from calibre.gui2.library.models import BooksModel, DeviceBooksModel
-from calibre.gui2.pin_columns import PinTableView
+from calibre.gui2.pin_columns import PinTableView, TableView
+from calibre.gui2.preferences.create_custom_column import CreateNewCustomColumn
 from calibre.utils.config import prefs, tweaks
 from calibre.utils.icu import primary_sort_key
 from polyglot.builtins import iteritems
@@ -320,7 +338,7 @@ class AdjustColumnSize(QDialog):  # {{{
 
 
 @setup_dnd_interface
-class BooksView(QTableView):  # {{{
+class BooksView(TableView):  # {{{
 
     files_dropped = pyqtSignal(object)
     books_dropped = pyqtSignal(object)
@@ -361,9 +379,10 @@ class BooksView(QTableView):  # {{{
             elif tval == 'open_viewer':
                 wv.setEditTriggers(QAbstractItemView.EditTrigger.SelectedClicked|wv.editTriggers())
                 wv.doubleClicked.connect(parent.iactions['View'].view_triggered)
-            elif tval == 'show_book_details':
+            elif tval in ('show_book_details', 'show_locked_book_details'):
                 wv.setEditTriggers(QAbstractItemView.EditTrigger.SelectedClicked|wv.editTriggers())
-                wv.doubleClicked.connect(parent.iactions['Show Book Details'].show_book_info)
+                wv.doubleClicked.connect(partial(parent.iactions['Show Book Details'].show_book_info,
+                                                 locked=tval == 'show_locked_book_details'))
             elif tval == 'edit_metadata':
                 # Must not enable single-click to edit, or the field will remain
                 # open in edit mode underneath the edit metadata dialog
@@ -379,29 +398,8 @@ class BooksView(QTableView):  # {{{
             wv.setAlternatingRowColors(True)
             wv.setWordWrap(False)
         self.refresh_grid()
-
-        self.rating_delegate = RatingDelegate(self)
-        self.half_rating_delegate = RatingDelegate(self, is_half_star=True)
-        self.timestamp_delegate = DateDelegate(self)
-        self.pubdate_delegate = PubDateDelegate(self)
-        self.last_modified_delegate = DateDelegate(self,
-                tweak_name='gui_last_modified_display_format')
-        self.languages_delegate = LanguagesDelegate(self)
-        self.tags_delegate = CompleteDelegate(self, ',', 'all_tag_names')
-        self.authors_delegate = CompleteDelegate(self, '&', 'all_author_names', True)
-        self.cc_names_delegate = CompleteDelegate(self, '&', 'all_custom', True)
-        self.series_delegate = SeriesDelegate(self)
-        self.publisher_delegate = TextDelegate(self)
-        self.text_delegate = TextDelegate(self)
-        self.cc_text_delegate = CcTextDelegate(self)
-        self.cc_series_delegate = CcSeriesDelegate(self)
-        self.cc_longtext_delegate = CcLongTextDelegate(self)
-        self.cc_markdown_delegate = CcMarkdownDelegate(self)
-        self.cc_enum_delegate = CcEnumDelegate(self)
-        self.cc_bool_delegate = CcBoolDelegate(self)
-        self.cc_comments_delegate = CcCommentsDelegate(self)
-        self.cc_template_delegate = CcTemplateDelegate(self)
-        self.cc_number_delegate = CcNumberDelegate(self)
+        self.create_delegates()
+        self.pin_view.create_delegates()
         self.display_parent = parent
         self._model = modelcls(self)
         self.setModel(self._model)
@@ -411,12 +409,12 @@ class BooksView(QTableView):  # {{{
         for wv in self, self.pin_view:
             wv.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
             wv.setSortingEnabled(True)
-        self.selectionModel().currentRowChanged.connect(self._model.current_changed, type=Qt.ConnectionType.QueuedConnection)
+        self.selectionModel().currentRowChanged.connect(self.on_current_row_change)
         self.selectionModel().selectionChanged.connect(self.selection_changed.emit)
         self.preserve_state = partial(PreserveViewState, self)
         self.marked_changed_listener = FunctionDispatcher(self.marked_changed)
 
-        # {{{ Column Header setup
+        # Column Header setup {{{
         self.can_add_columns = True
         self.was_restored = False
         self.allow_save_state = True
@@ -531,6 +529,18 @@ class BooksView(QTableView):  # {{{
             view.apply_state(view.get_default_state())
         elif action == 'addcustcol':
             self.add_column_signal.emit()
+        elif action == 'editcustcol':
+            def show_restart_dialog():
+                from calibre.gui2.preferences.main import must_restart_message
+                if show_restart_warning(must_restart_message):
+                    self.gui.quit(restart=True)
+            col_manager = CreateNewCustomColumn(self.gui)
+            if col_manager.must_restart():
+                show_restart_dialog()
+            else:
+                res = col_manager.edit_existing_column(column)
+                if res[0] == CreateNewCustomColumn.Result.COLUMN_EDITED:
+                    show_restart_dialog()
         elif action.startswith('align_'):
             alignment = action.partition('_')[-1]
             self._model.change_alignment(column, alignment)
@@ -595,6 +605,13 @@ class BooksView(QTableView):  # {{{
                 ans.addAction(QIcon.ic('width.png'), _('Adjust width of column {0}').format(name),
                           partial(self.manually_adjust_column_size, view, col, name))
 
+        if not isinstance(view, DeviceBooksView):
+            col_manager = CreateNewCustomColumn(self.gui)
+            if self.can_add_columns and self.model().is_custom_column(col):
+                act = ans.addAction(QIcon.ic('edit_input.png'), _('Edit column definition for %s') % name,
+                                    partial(handler, action='editcustcol'))
+                if col_manager.must_restart():
+                    act.setEnabled(False)
         if self.is_library_view:
             if self._model.db.field_metadata[col]['is_category']:
                 act = ans.addAction(QIcon.ic('quickview.png'), _('Quickview column %s') % name,
@@ -628,8 +645,10 @@ class BooksView(QTableView):  # {{{
                 partial(handler, action='reset_ondevice_width'))
         ans.addAction(_('Restore default layout'), partial(handler, action='defaults'))
         if self.can_add_columns:
-            ans.addAction(
-                    QIcon.ic('column.png'), _('Add your own columns'), partial(handler, action='addcustcol'))
+            act = ans.addAction(QIcon.ic('column.png'), _('Add your own columns'),
+                                partial(handler, action='addcustcol'))
+            col_manager = CreateNewCustomColumn(self.gui)
+            act.setEnabled(not col_manager.must_restart())
         return ans
 
     def show_row_header_context_menu(self, pos):
@@ -692,7 +711,7 @@ class BooksView(QTableView):  # {{{
 
             ac = getattr(m, 'column_mouse_move_action', None)
             if ac is None:
-                ac = m.column_mouse_move_action = m.addAction(_("Allow moving columns with the mouse"),
+                ac = m.column_mouse_move_action = m.addAction(_('Allow moving columns with the mouse'),
                           partial(self.column_header_context_handler, action='lock', column=col, view=view))
                 ac.setCheckable(True)
             ac.setChecked(view.column_header.sectionsMovable())
@@ -1025,9 +1044,6 @@ class BooksView(QTableView):  # {{{
 
         self.was_restored = True
 
-    def refresh_composite_edit(self):
-        self.cc_template_delegate.refresh()
-
     def refresh_row_sizing(self):
         self.row_sizing_done = False
         self.do_row_sizing()
@@ -1065,11 +1081,6 @@ class BooksView(QTableView):  # {{{
         self.alternate_views.set_database(db)
         self.save_state()
         self._model.set_database(db)
-        self.tags_delegate.set_database(db)
-        self.cc_names_delegate.set_database(db)
-        self.authors_delegate.set_database(db)
-        self.series_delegate.set_auto_complete_function(db.all_series)
-        self.publisher_delegate.set_auto_complete_function(db.all_publishers)
         self.alternate_views.set_database(db, stage=1)
 
     def marked_changed(self, old_marked, current_marked):
@@ -1113,56 +1124,8 @@ class BooksView(QTableView):  # {{{
                         self.last_modified_delegate, self.languages_delegate, self.half_rating_delegate):
                     vw.setItemDelegateForColumn(i, vw.itemDelegate())
 
-        cm = self.column_map
-
-        def set_item_delegate(colhead, delegate):
-            idx = cm.index(colhead)
-            self.setItemDelegateForColumn(idx, delegate)
-            self.pin_view.setItemDelegateForColumn(idx, delegate)
-
-        for colhead in cm:
-            if self._model.is_custom_column(colhead):
-                cc = self._model.custom_columns[colhead]
-                if cc['datatype'] == 'datetime':
-                    delegate = CcDateDelegate(self)
-                    delegate.set_format(cc['display'].get('date_format',''))
-                    set_item_delegate(colhead, delegate)
-                elif cc['datatype'] == 'comments':
-                    ctype = cc['display'].get('interpret_as', 'html')
-                    if ctype == 'short-text':
-                        set_item_delegate(colhead, self.cc_text_delegate)
-                    elif ctype == 'long-text':
-                        set_item_delegate(colhead, self.cc_longtext_delegate)
-                    elif ctype == 'markdown':
-                        set_item_delegate(colhead, self.cc_markdown_delegate)
-                    else:
-                        set_item_delegate(colhead, self.cc_comments_delegate)
-                elif cc['datatype'] == 'text':
-                    if cc['is_multiple']:
-                        if cc['display'].get('is_names', False):
-                            set_item_delegate(colhead, self.cc_names_delegate)
-                        else:
-                            set_item_delegate(colhead, self.tags_delegate)
-                    else:
-                        set_item_delegate(colhead, self.cc_text_delegate)
-                elif cc['datatype'] == 'series':
-                    set_item_delegate(colhead, self.cc_series_delegate)
-                elif cc['datatype'] in ('int', 'float'):
-                    set_item_delegate(colhead, self.cc_number_delegate)
-                elif cc['datatype'] == 'bool':
-                    set_item_delegate(colhead, self.cc_bool_delegate)
-                elif cc['datatype'] == 'rating':
-                    d = self.half_rating_delegate if cc['display'].get('allow_half_stars', False) else self.rating_delegate
-                    set_item_delegate(colhead, d)
-                elif cc['datatype'] == 'composite':
-                    set_item_delegate(colhead, self.cc_template_delegate)
-                elif cc['datatype'] == 'enumeration':
-                    set_item_delegate(colhead, self.cc_enum_delegate)
-            else:
-                dattr = colhead+'_delegate'
-                delegate = colhead if hasattr(self, dattr) else 'text'
-                set_item_delegate(colhead, getattr(self, delegate+'_delegate'))
-
+        self.set_delegates()
+        self.pin_view.set_delegates()
         self.restore_state()
         self.set_ondevice_column_visibility()
         # in case there were marked books
@@ -1276,7 +1239,7 @@ class BooksView(QTableView):  # {{{
     def visible_columns(self):
         h = self.horizontalHeader()
         logical_indices = (x for x in range(h.count()) if not h.isSectionHidden(x))
-        rmap = {i:x for i, x in enumerate(self.column_map)}
+        rmap = dict(enumerate(self.column_map))
         return (rmap[h.visualIndex(x)] for x in logical_indices if h.visualIndex(x) > -1)
 
     def refresh_book_details(self, force=False):
@@ -1449,15 +1412,6 @@ class BooksView(QTableView):  # {{{
             return QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows
         return super().selectionCommand(index, event)
 
-    def keyPressEvent(self, ev):
-        if handle_enter_press(self, ev):
-            return
-        if ev.key() == Qt.Key.Key_F2:
-            key = self.column_map[self.currentIndex().column()]
-            if self._model.db.field_metadata[key]['datatype'] == 'composite':
-                self.cc_template_delegate.allow_one_edit()
-        return QTableView.keyPressEvent(self, ev)
-
     def ids_to_rows(self, ids):
         row_map = OrderedDict()
         ids = frozenset(ids)
@@ -1578,6 +1532,9 @@ class BooksView(QTableView):  # {{{
     def close(self):
         self._model.close()
 
+    def on_current_row_change(self, current, previous):
+        self._model.current_changed(current, previous)
+
     def set_editable(self, editable, supports_backloading):
         self._model.set_editable(editable)
 
@@ -1614,7 +1571,20 @@ class BooksView(QTableView):  # {{{
             self._model.search_done.connect(self.alternate_views.restore_current_book_state)
 
     def connect_to_book_display(self, bd):
-        self._model.new_bookdisplay_data.connect(bd)
+        self.book_display_callback = bd
+        self.connect_to_book_display_timer = t = QTimer(self)
+        t.setSingleShot(True)
+        t.timeout.connect(self._debounce_book_display)
+        t.setInterval(BOOK_DETAILS_DISPLAY_DEBOUNCE_DELAY)
+        self._model.new_bookdisplay_data.connect(self._timed_connect_to_book_display)
+
+    def _timed_connect_to_book_display(self, data):
+        self._book_display_data = data
+        self.connect_to_book_display_timer.start()
+
+    def _debounce_book_display(self):
+        data, self._book_display_data = self._book_display_data, None
+        self.book_display_callback(data)
 
     def search_done(self, ok):
         self._search_done(self, ok)
@@ -1709,5 +1679,4 @@ class DeviceBooksView(BooksView):  # {{{
         h = self.horizontalHeader()
         h.setSortIndicator(
             h.sortIndicatorSection(), Qt.SortOrder.AscendingOrder if h.sortIndicatorOrder() == Qt.SortOrder.DescendingOrder else Qt.SortOrder.DescendingOrder)
-
 # }}}

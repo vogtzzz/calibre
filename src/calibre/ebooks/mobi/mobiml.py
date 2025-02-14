@@ -9,12 +9,11 @@ import copy
 import numbers
 import re
 from contextlib import suppress
+
 from lxml import etree
 
 from calibre.ebooks.mobi.utils import convert_color_for_font_tag
-from calibre.ebooks.oeb.base import (
-    XHTML, XHTML_NS, barename, namespace, urlnormalize
-)
+from calibre.ebooks.oeb.base import XHTML, XHTML_NS, barename, namespace, urlnormalize
 from calibre.ebooks.oeb.stylizer import Stylizer
 from calibre.ebooks.oeb.transforms.flatcss import KeyMapper
 from calibre.utils.imghdr import identify
@@ -161,8 +160,8 @@ class MobiMLizer:
             return ptsize
         embase = self.profile.fbase
         if round(ptsize) < embase:
-            return "%dpt" % int(round(ptsize))
-        return "%dem" % int(round(ptsize / embase))
+            return f'{int(round(ptsize))}pt'
+        return f'{int(round(ptsize/embase))}em'
 
     def preize_text(self, text, pre_wrap=False):
         text = str(text)
@@ -306,7 +305,7 @@ class MobiMLizer:
                 inline = etree.SubElement(inline, XHTML('i'))
             if istate.bold:
                 inline = etree.SubElement(inline, XHTML('b'))
-            if istate.bgcolor is not None and istate.bgcolor != 'transparent' :
+            if istate.bgcolor is not None and istate.bgcolor != 'transparent':
                 inline = etree.SubElement(inline, XHTML('span'),
                         bgcolor=convert_color_for_font_tag(istate.bgcolor))
             if istate.fgcolor != 'black':
@@ -504,7 +503,7 @@ class MobiMLizer:
                 istate.attrib['width'] = raww
             else:
                 prop = style['width'] / self.profile.width
-                istate.attrib['width'] = "%d%%" % int(round(prop * 100))
+                istate.attrib['width'] = f'{int(round(prop*100))}%'
         elif display == 'table':
             tag = 'table'
         elif display == 'table-row':
@@ -530,11 +529,11 @@ class MobiMLizer:
             t = elem.text
             if not t:
                 t = ''
-            elem.text = '\u201c' + t
+            elem.text = '“' + t
             t = elem.tail
             if not t:
                 t = ''
-            elem.tail = '\u201d' + t
+            elem.tail = '”' + t
         text = None
         if elem.text:
             if istate.preserve or istate.pre_wrap:

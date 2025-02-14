@@ -1,22 +1,32 @@
 __license__   = 'GPL v3'
 __copyright__ = '2008, Kovid Goyal <kovid at kovidgoyal.net>'
 
-import sys, collections, operator, copy, re, numbers
+import collections
+import copy
+import numbers
+import operator
+import re
+import sys
 
-from qt.core import (
-    Qt, QRectF, QFont, QColor, QPixmap, QGraphicsPixmapItem, QGraphicsItem,
-    QFontMetrics, QPen, QBrush, QGraphicsRectItem)
+from qt.core import QBrush, QColor, QFont, QFontMetrics, QGraphicsItem, QGraphicsPixmapItem, QGraphicsRectItem, QPen, QPixmap, QRectF, Qt
 
-from calibre.ebooks.lrf.fonts import LIBERATION_FONT_MAP
 from calibre.ebooks.hyphenate import hyphenate_word
+from calibre.ebooks.lrf.fonts import LIBERATION_FONT_MAP
 from polyglot.builtins import string_or_bytes
+
 
 def WEIGHT_MAP(wt):
     return int(wt / 10 - 1)
+
+
 def NULL(a, b):
     return a
+
+
 def COLOR(a, b):
     return QColor(*a)
+
+
 def WEIGHT(a, b):
     return WEIGHT_MAP(a)
 
@@ -96,7 +106,7 @@ class FontLoader:
 
 
 class Style:
-    map = collections.defaultdict(lambda : NULL)
+    map = collections.defaultdict(lambda: NULL)
 
     def __init__(self, style, dpi):
         self.fdpi = dpi/720
@@ -114,7 +124,7 @@ class Style:
 
 class TextStyle(Style):
 
-    map = collections.defaultdict(lambda : NULL,
+    map = collections.defaultdict(lambda: NULL,
         fontsize=operator.mul,
         fontwidth=operator.mul,
         fontweight=WEIGHT,
@@ -146,7 +156,7 @@ class TextStyle(Style):
 
 
 class BlockStyle(Style):
-    map = collections.defaultdict(lambda : NULL,
+    map = collections.defaultdict(lambda: NULL,
         bgcolor=COLOR,
         framecolor=COLOR,
         )
@@ -168,11 +178,11 @@ class TextBlock:
 
     has_content = property(fget=lambda self: self.peek_index < len(self.lines)-1)
     XML_ENTITIES = {
-            "apos" : "'",
-            "quot" : '"',
-            "amp" : "&",
-            "lt" : "<",
-            "gt" : ">"
+            'apos': "'",
+            'quot': '"',
+            'amp' : '&',
+            'lt'  : '<',
+            'gt'  : '>'
     }
 
     def __init__(self, tb, font_loader, respect_max_y, text_width, logger,
@@ -283,7 +293,7 @@ class TextBlock:
                     open_containers.append((('current_style', self.current_style.copy()),))
                     self.current_style.update(i.attrs)
             else:
-                self.logger.warning('Unhandled TextTag %s'%(i.name,))
+                self.logger.warning(f'Unhandled TextTag {i.name}')
                 if not i.self_closing:
                     open_containers.append([])
 
@@ -311,7 +321,7 @@ class TextBlock:
 
     def process_text(self, raw):
         for ent, rep in TextBlock.XML_ENTITIES.items():
-            raw = raw.replace('&%s;'%ent, rep)
+            raw = raw.replace(f'&{ent};', rep)
         while len(raw) > 0:
             if self.current_line is None:
                 self.create_line()

@@ -17,23 +17,51 @@ from functools import lru_cache
 from io import BytesIO
 from itertools import count
 from multiprocessing.pool import ThreadPool
+from threading import Event, Thread
+from xml.sax.saxutils import escape
+
 from qt.core import (
-    QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-    QFormLayout, QGroupBox, QHBoxLayout, QIcon, QImage, QImageReader,
-    QItemSelectionModel, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPen, QPixmap,
-    QProgressDialog, QSize, QSpinBox, QSplitter, QStackedLayout, QStaticText, QStyle,
-    QStyledItemDelegate, Qt, QTabWidget, QTextEdit, QVBoxLayout, QWidget, pyqtSignal,
+    QAbstractItemView,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QIcon,
+    QImage,
+    QImageReader,
+    QItemSelectionModel,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QPen,
+    QPixmap,
+    QProgressDialog,
+    QSize,
+    QSpinBox,
+    QSplitter,
+    QStackedLayout,
+    QStaticText,
+    QStyle,
+    QStyledItemDelegate,
+    Qt,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
     sip,
 )
-from threading import Event, Thread
 
-from calibre import detect_ncpus as cpu_count, fit_image, human_readable, walk
+from calibre import detect_ncpus as cpu_count
+from calibre import fit_image, human_readable, walk
 from calibre.constants import cache_dir
 from calibre.customize.ui import interface_actions
-from calibre.gui2 import (
-    choose_dir, choose_save_file, empty_index, error_dialog, gprefs,
-    icon_resource_manager, must_use_qt, safe_open_url,
-)
+from calibre.gui2 import choose_dir, choose_save_file, empty_index, error_dialog, gprefs, icon_resource_manager, must_use_qt, safe_open_url
 from calibre.gui2.dialogs.progress import ProgressDialog
 from calibre.gui2.progress_indicator import ProgressIndicator
 from calibre.gui2.widgets2 import Dialog
@@ -42,7 +70,8 @@ from calibre.utils.filenames import ascii_filename, atomic_rename
 from calibre.utils.https import HTTPError, get_https_resource_securely
 from calibre.utils.icu import numeric_sort_key as sort_key
 from calibre.utils.img import Canvas, image_from_data, optimize_jpeg, optimize_png
-from calibre.utils.resources import get_image_path as I, get_path as P
+from calibre.utils.resources import get_image_path as I
+from calibre.utils.resources import get_path as P
 from calibre.utils.zipfile import ZIP_STORED, ZipFile
 from polyglot import http_client
 from polyglot.builtins import as_bytes, iteritems, reraise
@@ -72,7 +101,7 @@ def read_images_from_folder(path):
         name = os.path.relpath(filepath, path).replace(os.sep, '/')
         ext = name.rpartition('.')[-1]
         bname = os.path.basename(name)
-        if bname.startswith('.') or bname.startswith('_'):
+        if bname.startswith(('.', '_')):
             continue
         if ext == 'svg':
             render_svg(filepath)
@@ -93,8 +122,9 @@ class Theme:
 
 class Report:
 
-    def __init__(self, path, name_map, extra, missing, theme):
+    def __init__(self, path, name_map, extra, missing, theme, number):
         self.path, self.name_map, self.extra, self.missing, self.theme = path, name_map, extra, missing, theme
+        self.number = number
         self.bad = {}
 
     @property
@@ -108,10 +138,16 @@ def read_theme_from_folder(path):
     name_map = read_images_from_folder(path)
     name_map.pop(THEME_COVER, None)
     name_map.pop('blank.png', None)
-    current_names = frozenset(current_image_map)
-    names = frozenset(name_map)
+
+    def canonical_name(x):
+        return x.replace('-for-dark-theme', '').replace('-for-light-theme', '')
+
+    current_names = set(map(canonical_name, current_image_map))
+    names = set(map(canonical_name, name_map))
     extra = names - current_names
     missing = current_names - names
+    missing.discard('blank.png')
+    number = len(names - extra)
     try:
         with open(os.path.join(path, THEME_METADATA), 'rb') as f:
             metadata = json.load(f)
@@ -133,7 +169,7 @@ def read_theme_from_folder(path):
         return metadata.get(x, defval)
     theme = Theme(g('title'), g('author'), safe_int(g('version', -1)), g('description'), g('license', 'Unknown'), g('url', None))
 
-    ans = Report(path, name_map, extra, missing, theme)
+    ans = Report(path, name_map, extra, missing, theme, number)
     try:
         with open(os.path.join(path, THEME_COVER), 'rb') as f:
             theme.cover = f.read()
@@ -276,7 +312,7 @@ class ThemeCreateDialog(Dialog):
             'color_palette': self.color_palette.currentData(),
             'version': self.version.value(),
             'description': self.description.toPlainText().strip(),
-            'number': len(self.report.name_map) - len(self.report.extra),
+            'number': self.report.number,
             'date': utcnow().date().isoformat(),
             'name': self.report.name,
             'license': self.license.text().strip() or 'Unknown',
@@ -304,7 +340,7 @@ class ThemeCreateDialog(Dialog):
         self.license.setText((theme.license or 'Unknown').strip())
         self.url.setText((theme.url or '').strip())
         if self.report.missing:
-            title =  _('%d icons missing in this theme') % len(self.report.missing)
+            title = _('%d icons missing in this theme') % len(self.report.missing)
         else:
             title = _('No missing icons')
         self.missing_icons_group.setTitle(title)
@@ -462,8 +498,8 @@ def create_theme(folder=None, parent=None):
         icon_resource_manager.set_theme()
 # }}}
 
-# Choose Theme  {{{
 
+# Choose Theme {{{
 
 def download_cover(cover_url, etag=None, cached=b''):
     url = BASE_URL + cover_url
@@ -548,6 +584,10 @@ class Delegate(QStyledItemDelegate):
 
     SPACING = 10
 
+    def __init__(self, *a):
+        super().__init__(*a)
+        self.static_text_cache = {}
+
     def sizeHint(self, option, index):
         return QSize(COVER_SIZE[0] * 2, COVER_SIZE[1] + 2 * self.SPACING)
 
@@ -565,21 +605,22 @@ class Delegate(QStyledItemDelegate):
             painter.setPen(QPen(QApplication.instance().palette().highlightedText().color()))
         bottom = option.rect.bottom() - 2
         painter.drawLine(0, bottom, option.rect.right(), bottom)
-        if 'static-text' not in theme:
-            visit = _('Right click to visit theme homepage') if theme.get('url') else ''
-            theme['static-text'] = QStaticText(_(
-                '''
-            <h2>{title}</h2>
+        visit = _('Right click to visit theme homepage') if theme.get('url') else ''
+        text = _('''\
+            <p><b><big>{title}</big></b><p>
             <p>by <i>{author}</i> with <b>{number}</b> icons [{size}]</p>
             <p>{description}</p>
             <p>Version: {version} Number of users: {usage:n}</p>
             <p><i>{visit}</i></p>
-            ''').format(title=theme.get('title', _('Unknown')), author=theme.get('author', _('Unknown')),
-                       number=theme.get('number', 0), description=theme.get('description', ''),
+            ''').format(title=escape(theme.get('title') or _('Unknown')), author=escape(theme.get('author', _('Unknown'))),
+                       number=theme.get('number', 0), description=escape(theme.get('description', '')),
                        size=human_readable(theme.get('compressed-size', 0)), version=theme.get('version', 1),
-                       usage=theme.get('usage', 0), visit=visit
-        ))
-        painter.drawStaticText(COVER_SIZE[0] + self.SPACING, option.rect.top() + self.SPACING, theme['static-text'])
+                       usage=theme.get('usage', 0), visit=escape(visit)
+            )
+        st = self.static_text_cache.get(text)
+        if st is None:
+            self.static_text_cache[text] = st = QStaticText(text)
+        painter.drawStaticText(COVER_SIZE[0] + self.SPACING, option.rect.top() + self.SPACING, st)
         painter.restore()
 
 
@@ -710,12 +751,12 @@ class ChooseThemeWidget(QWidget):
 
     def re_sort(self):
         ct = self.current_theme
-        self.themes.sort(key=lambda x:sort_key(x.get('title', '')))
+        self.themes.sort(key=lambda x: sort_key(x.get('title', '')))
         field = self.sort_on
         if field == 'number':
-            self.themes.sort(key=lambda x:x.get('number', 0), reverse=True)
+            self.themes.sort(key=lambda x: x.get('number', 0), reverse=True)
         elif field == 'usage':
-            self.themes.sort(key=lambda x:x.get('usage', 0), reverse=True)
+            self.themes.sort(key=lambda x: x.get('usage', 0), reverse=True)
         self.theme_list.clear()
         for theme in self.themes:
             i = QListWidgetItem(theme.get('title', '') + ' {} {}'.format(theme.get('number'), theme.get('usage', 0)), self.theme_list)
@@ -733,7 +774,7 @@ class ChooseThemeWidget(QWidget):
         return default_theme()
 
     def set_current_theme(self, name):
-        if not hasattr(self, "themes"):
+        if not hasattr(self, 'themes'):
             return False
         for i, t in enumerate(self.themes):
             if t.get('name') == name:
@@ -903,7 +944,7 @@ class ChooseTheme(Dialog):
         if themes_to_download:
             size = sum(t['compressed-size'] for t in themes_to_download.values())
             d = DownloadProgress(self, size)
-            d.canceled_signal.connect(lambda : setattr(self, 'keep_downloading', False))
+            d.canceled_signal.connect(lambda: setattr(self, 'keep_downloading', False))
             t = Thread(name='DownloadIconTheme', target=download)
             t.daemon = True
             t.start()

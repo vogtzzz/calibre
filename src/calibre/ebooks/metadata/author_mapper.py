@@ -5,9 +5,9 @@
 import re
 from collections import deque
 
-from calibre.utils.icu import (
-    capitalize, lower, lower as icu_lower, upper, upper as icu_upper,
-)
+from calibre.utils.icu import capitalize, lower, upper
+from calibre.utils.icu import lower as icu_lower
+from calibre.utils.icu import upper as icu_upper
 
 
 def cap_author_token(token):
@@ -127,7 +127,7 @@ def uniq(vals, kmap=icu_lower):
     lvals = (kmap(x) for x in vals)
     seen = set()
     seen_add = seen.add
-    return list(x for x, k in zip(vals, lvals) if k not in seen and not seen_add(k))
+    return [x for x, k in zip(vals, lvals) if k not in seen and not seen_add(k)]
 
 
 def compile_rules(rules):

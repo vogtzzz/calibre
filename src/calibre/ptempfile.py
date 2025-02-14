@@ -1,13 +1,14 @@
 __license__   = 'GPL v3'
 __copyright__ = '2008, Kovid Goyal <kovid at kovidgoyal.net>'
-"""
+'''
 Provides platform independent temporary files that persist even after
 being closed.
-"""
-import tempfile, os, atexit
+'''
+import atexit
+import os
+import tempfile
 
-from calibre.constants import (__version__, __appname__, filesystem_encoding,
-        iswindows, get_windows_temp_path, ismacos)
+from calibre.constants import __appname__, __version__, filesystem_encoding, get_windows_temp_path, ismacos, iswindows
 
 
 def cleanup(path):
@@ -53,8 +54,8 @@ def determined_remove_dir(x):
 
 def app_prefix(prefix):
     if iswindows:
-        return '%s_'%__appname__
-    return '%s_%s_%s'%(__appname__, __version__, prefix)
+        return f'{__appname__}_'
+    return f'{__appname__}_{__version__}_{prefix}'
 
 
 _osx_cache_dir = None
@@ -156,16 +157,15 @@ def _make_dir(suffix, prefix, base):
 
 
 class PersistentTemporaryFile:
-
-    """
+    '''
     A file-like object that is a temporary file that is available even after being closed on
     all platforms. It is automatically deleted on normal program termination.
-    """
+    '''
     _file = None
 
-    def __init__(self, suffix="", prefix="", dir=None, mode='w+b'):
+    def __init__(self, suffix='', prefix='', dir=None, mode='w+b'):
         if prefix is None:
-            prefix = ""
+            prefix = ''
         if dir is None:
             dir = base_dir()
         fd, name = _make_file(suffix, prefix, dir)
@@ -207,7 +207,6 @@ def PersistentTemporaryDirectory(suffix='', prefix='', dir=None):
 
 
 class TemporaryDirectory:
-
     '''
     A temporary directory to be used in a with statement.
     '''
@@ -232,7 +231,7 @@ class TemporaryDirectory:
 
 class TemporaryFile:
 
-    def __init__(self, suffix="", prefix="", dir=None, mode='w+b'):
+    def __init__(self, suffix='', prefix='', dir=None, mode='w+b'):
         if prefix is None:
             prefix = ''
         if suffix is None:
@@ -255,7 +254,7 @@ class TemporaryFile:
 
 class SpooledTemporaryFile(tempfile.SpooledTemporaryFile):
 
-    def __init__(self, max_size=0, suffix="", prefix="", dir=None, mode='w+b',
+    def __init__(self, max_size=0, suffix='', prefix='', dir=None, mode='w+b',
             bufsize=-1):
         if prefix is None:
             prefix = ''

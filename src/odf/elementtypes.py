@@ -20,8 +20,21 @@
 
 
 from .namespaces import (
-    ANIMNS, CHARTNS, DR3DNS, DRAWNS, FORMNS, MANIFESTNS, METANS, NUMBERNS, OFFICENS,
-    PRESENTATIONNS, SCRIPTNS, STYLENS, SVGNS, TABLENS, TEXTNS
+    ANIMNS,
+    CHARTNS,
+    DR3DNS,
+    DRAWNS,
+    FORMNS,
+    MANIFESTNS,
+    METANS,
+    NUMBERNS,
+    OFFICENS,
+    PRESENTATIONNS,
+    SCRIPTNS,
+    STYLENS,
+    SVGNS,
+    TABLENS,
+    TEXTNS,
 )
 
 # Inline element don't cause a box
@@ -324,5 +337,5 @@ empty_elements = (
     (TEXTNS,'user-index-mark'),
     (TEXTNS,'user-index-mark-end'),
     (TEXTNS,'user-index-mark-start'),
-    (TEXTNS,'variable-decl')
+    (TEXTNS,'variable-decl'),
 )

@@ -8,20 +8,17 @@ __docformat__ = 'restructuredtext en'
 import copy
 from collections import defaultdict
 
-from qt.core import Qt, QComboBox, QListWidgetItem
+from qt.core import QComboBox, QListWidgetItem, Qt
 
-from calibre.customize.ui import is_disabled
+from calibre.customize.ui import device_plugins, disabled_device_plugins, is_disabled, metadata_writers
 from calibre.gui2 import error_dialog, question_dialog, warning_dialog
 from calibre.gui2.device import device_name_for_plugboards
 from calibre.gui2.dialogs.template_line_editor import TemplateLineEditor
+from calibre.gui2.email import plugboard_email_formats, plugboard_email_value
 from calibre.gui2.preferences import ConfigWidgetBase, test_widget
 from calibre.gui2.preferences.plugboard_ui import Ui_Form
-from calibre.customize.ui import metadata_writers, device_plugins, disabled_device_plugins
-from calibre.library.save_to_disk import plugboard_any_format_value, \
-                    plugboard_any_device_value, plugboard_save_to_disk_value, \
-                    find_plugboard
-from calibre.srv.content import plugboard_content_server_value, plugboard_content_server_formats
-from calibre.gui2.email import plugboard_email_value, plugboard_email_formats
+from calibre.library.save_to_disk import find_plugboard, plugboard_any_device_value, plugboard_any_format_value, plugboard_save_to_disk_value
+from calibre.srv.content import plugboard_content_server_formats, plugboard_content_server_value
 from calibre.utils.formatter import validation_formatter
 
 
@@ -85,11 +82,12 @@ class ConfigWidget(ConfigWidgetBase, Ui_Form):
 
         self.dest_fields = ['',
                             'authors', 'author_sort', 'language', 'publisher',
-                            'series', 'tags', 'title', 'title_sort', 'comments']
+                            'series', 'series_index', 'tags', 'title', 'title_sort',
+                            'comments']
 
         self.source_widgets = []
         self.dest_widgets = []
-        for i in range(0, len(self.dest_fields)-1):
+        for i in range(len(self.dest_fields)-1):
             w = TemplateLineEditor(self)
             self.source_widgets.append(w)
             self.fields_layout.addWidget(w, 5+i, 0, 1, 1)
@@ -292,7 +290,7 @@ class ConfigWidget(ConfigWidgetBase, Ui_Form):
     def ok_clicked(self):
         pb = []
         comments_in_dests = False
-        for i in range(0, len(self.source_widgets)):
+        for i in range(len(self.source_widgets)):
             s = str(self.source_widgets[i].text())
             if s:
                 d = self.dest_widgets[i].currentIndex()
@@ -379,7 +377,7 @@ class ConfigWidget(ConfigWidgetBase, Ui_Form):
                 ops = []
                 for op in self.current_plugboards[f][d]:
                     ops.append('([' + op[0] + '] -> ' + op[1] + ')')
-                txt = '%s:%s = %s\n'%(f, d, ', '.join(ops))
+                txt = '{}:{} = {}\n'.format(f, d, ', '.join(ops))
                 item = QListWidgetItem(txt)
                 item.setData(Qt.ItemDataRole.UserRole, (f, d))
                 if d in self.disabled_devices:

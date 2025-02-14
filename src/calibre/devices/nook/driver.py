@@ -57,7 +57,7 @@ class NOOK(USBMS):
 
             cover = Image.new('RGB', (96, 144), 'black')
             im = Image.open(io.BytesIO(coverdata))
-            im.thumbnail((96, 144), Image.ANTIALIAS)
+            im.thumbnail((96, 144), Image.Resampling.LANCZOS)
 
             x, y = im.size
             cover.paste(im, ((96-x)/2, (144-y)/2))
@@ -70,7 +70,7 @@ class NOOK(USBMS):
         cover.save(data, 'JPEG')
         coverdata = data.getvalue()
 
-        with open('%s.jpg' % os.path.join(path, filename), 'wb') as coverfile:
+        with open(f'{os.path.join(path, filename)}.jpg', 'wb') as coverfile:
             coverfile.write(coverdata)
             fsync(coverfile)
 

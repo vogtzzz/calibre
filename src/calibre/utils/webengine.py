@@ -1,18 +1,14 @@
 #!/usr/bin/env python
-# vim:fileencoding=utf-8
 # License: GPL v3 Copyright: 2021, Kovid Goyal <kovid at kovidgoyal.net>
 
 
 import json
 import os
-from qt.core import QBuffer, QIODevice, QObject, pyqtSignal, sip
-from qt.webengine import (
-    QWebEngineProfile, QWebEngineScript, QWebEngineSettings, QWebEngineUrlScheme
-)
 
-from calibre.constants import (
-    FAKE_PROTOCOL, SPECIAL_TITLE_FOR_WEBENGINE_COMMS, cache_dir
-)
+from qt.core import QBuffer, QIODevice, QObject, pyqtSignal, sip
+from qt.webengine import QWebEngineProfile, QWebEngineScript, QWebEngineSettings, QWebEngineUrlScheme
+
+from calibre.constants import FAKE_PROTOCOL, SPECIAL_TITLE_FOR_WEBENGINE_COMMS, cache_dir
 
 
 def setup_fake_protocol():
@@ -115,8 +111,9 @@ class to_js_bound(QObject):
         self.name = name
 
     def __call__(self, *args):
-        self.parent().page.runJavaScript('if (window.python_comm) python_comm._from_python({}, {})'.format(
-            json.dumps(self.name), json.dumps(args)), QWebEngineScript.ScriptWorldId.ApplicationWorld)
+        self.parent().page.runJavaScript(
+            f'if (window.python_comm) python_comm._from_python({json.dumps(self.name)}, {json.dumps(args)})',
+            QWebEngineScript.ScriptWorldId.ApplicationWorld)
     emit = __call__
 
 

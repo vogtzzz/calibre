@@ -4,9 +4,9 @@
 __license__ = 'GPL v3'
 __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 
-from multiprocessing.pool import ThreadPool
-from functools import partial
 from contextlib import closing
+from functools import partial
+from multiprocessing.pool import ThreadPool
 
 from calibre import detect_ncpus as cpu_count
 
@@ -50,6 +50,6 @@ def run_checkers(func, args_list):
     with closing(pool):
         for result, tb in pool.map(partial(worker, func), args_list):
             if tb is not None:
-                raise Exception('Failed to run worker: \n%s' % tb)
+                raise Exception(f'Failed to run worker: \n{tb}')
             ans.extend(result)
     return ans

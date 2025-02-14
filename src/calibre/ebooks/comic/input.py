@@ -13,6 +13,7 @@ import traceback
 from calibre import extract, prints, walk
 from calibre.constants import filesystem_encoding
 from calibre.ptempfile import PersistentTemporaryDirectory
+from calibre.utils.cleantext import clean_ascii_chars
 from calibre.utils.icu import numeric_sort_key
 from calibre.utils.ipc.job import ParallelJob
 from calibre.utils.ipc.server import Server
@@ -35,8 +36,8 @@ def extract_comic(path_to_comic_file):
     extract(path_to_comic_file, tdir)
     for x in walk(tdir):
         bn = os.path.basename(x)
-        nbn = bn.replace('#', '_')
-        if nbn != bn:
+        nbn = clean_ascii_chars(bn.replace('#', '_'))
+        if nbn and nbn != bn:
             os.rename(x, os.path.join(os.path.dirname(x), nbn))
     return tdir
 
@@ -114,8 +115,8 @@ class PageProcessor(list):  # {{{
     def render(self):
         from qt.core import QImage
 
-        from calibre.utils.img import crop_image, image_from_data, scale_image
         from calibre.utils.filenames import make_long_path_useable
+        from calibre.utils.img import crop_image, image_from_data, scale_image
         with open(make_long_path_useable(self.path_to_page), 'rb') as f:
             img = image_from_data(f.read())
         width, height = img.width(), img.height()
@@ -140,9 +141,15 @@ class PageProcessor(list):  # {{{
         from qt.core import QImage
 
         from calibre.utils.img import (
-            add_borders_to_image, despeckle_image, gaussian_sharpen_image,
-            image_to_data, normalize_image, quantize_image, remove_borders_from_image,
-            resize_image, rotate_image,
+            add_borders_to_image,
+            despeckle_image,
+            gaussian_sharpen_image,
+            image_to_data,
+            normalize_image,
+            quantize_image,
+            remove_borders_from_image,
+            resize_image,
+            rotate_image,
         )
         for i, img in enumerate(self.pages):
             if self.rotate:
@@ -229,7 +236,7 @@ class PageProcessor(list):  # {{{
                     final_fmt = QImage.Format.Format_Indexed8 if uses_256_colors else QImage.Format.Format_Grayscale16
                     if img.format() != final_fmt:
                         img = img.convertToFormat(final_fmt)
-            dest = '%d_%d.%s'%(self.num, i, self.opts.output_format)
+            dest = f'{self.num}_{i}.{self.opts.output_format}'
             dest = os.path.join(self.dest, dest)
             with open(dest, 'wb') as f:
                 f.write(image_to_data(img, fmt=self.opts.output_format))

@@ -9,9 +9,10 @@ __docformat__ = 'restructuredtext en'
 
 import re
 from itertools import count
-from calibre.ebooks.oeb.base import XHTML_NS
-from calibre.ebooks.oeb.base import OEBBook
+
 from lxml.etree import XPath
+
+from calibre.ebooks.oeb.base import XHTML_NS, OEBBook
 
 NSMAP = {'h': XHTML_NS, 'html': XHTML_NS, 'xhtml': XHTML_NS}
 PAGE_RE = re.compile(r'page', re.IGNORECASE)
@@ -47,7 +48,7 @@ def add_page_map(opfpath, opts):
     oeb = OEBBook(opfpath)
     selector = XPath(opts.page, namespaces=NSMAP)
     name_for = build_name_for(opts.page_names)
-    idgen = ("calibre-page-%d" % n for n in count(1))
+    idgen = (f'calibre-page-{n}' for n in count(1))
     for item in oeb.spine:
         data = item.data
         for elem in selector(data):

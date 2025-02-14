@@ -7,14 +7,29 @@ __docformat__ = 'restructuredtext en'
 
 import textwrap
 
-from qt.core import (QWidget, pyqtSignal, QCheckBox, QAbstractSpinBox, QApplication,
-    QLineEdit, QComboBox, Qt, QIcon, QDialog, QVBoxLayout,
-    QDialogButtonBox, QListView, QEvent, QListWidget, QTableWidget)
+from qt.core import (
+    QAbstractSpinBox,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QEvent,
+    QIcon,
+    QLineEdit,
+    QListView,
+    QListWidget,
+    Qt,
+    QTableWidget,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
+)
 
 from calibre.customize.ui import preferences_plugins
-from calibre.utils.config import ConfigProxy
 from calibre.gui2.complete2 import EditWithComplete
 from calibre.gui2.widgets import HistoryLineEdit
+from calibre.utils.config import ConfigProxy
 from polyglot.builtins import string_or_bytes
 
 
@@ -27,7 +42,6 @@ class AbortInitialize(Exception):
 
 
 class ConfigWidgetInterface:
-
     '''
     This class defines the interface that all widgets displayed in the
     Preferences dialog must implement. See :class:`ConfigWidgetBase` for
@@ -97,6 +111,29 @@ class ConfigWidgetInterface:
         '''
         pass
 
+    def do_on_child_tabs(self, method, *args):
+        r = False
+        for t in self.child_tabs:
+            lazy_init_called = getattr(t, 'lazy_init_called', True)
+            if method in ('commit', 'refresh_gui') and not lazy_init_called:
+                continue
+            if method == 'restore_defaults' and not lazy_init_called:
+                if hasattr(t, 'lazy_initialize'):
+                    t.lazy_initialize()
+                    t.lazy_init_called = True
+            r = r | bool(getattr(t, method)(*args))
+        return r
+
+
+def set_help_tips(gui_obj, tt):
+    if tt:
+        if not str(gui_obj.whatsThis()):
+            gui_obj.setWhatsThis(tt)
+        if not str(gui_obj.statusTip()):
+            gui_obj.setStatusTip(tt)
+        tt = '\n'.join(textwrap.wrap(tt, 70))
+        gui_obj.setToolTip(tt)
+
 
 class Setting:
 
@@ -130,7 +167,7 @@ class Setting:
             self.gui_obj.editTextChanged.connect(self.changed)
             self.gui_obj.currentIndexChanged.connect(self.changed)
         else:
-            raise ValueError('Unknown data type %s' % self.gui_obj.__class__)
+            raise ValueError(f'Unknown data type {self.gui_obj.__class__}')
 
         if isinstance(self.config_obj, ConfigProxy) and \
                 not str(self.gui_obj.toolTip()):
@@ -138,13 +175,7 @@ class Setting:
             if h:
                 self.gui_obj.setToolTip(h)
         tt = str(self.gui_obj.toolTip())
-        if tt:
-            if not str(self.gui_obj.whatsThis()):
-                self.gui_obj.setWhatsThis(tt)
-            if not str(self.gui_obj.statusTip()):
-                self.gui_obj.setStatusTip(tt)
-            tt = '\n'.join(textwrap.wrap(tt, 70))
-            self.gui_obj.setToolTip(tt)
+        set_help_tips(self.gui_obj, tt)
 
     def changed(self, *args):
         self.widget.changed_signal.emit()
@@ -241,7 +272,6 @@ class CommaSeparatedList(Setting):
 
 
 class ConfigWidgetBase(QWidget, ConfigWidgetInterface):
-
     '''
     Base class that contains code to easily add standard config widgets like
     checkboxes, combo boxes, text fields and so on. See the :meth:`register`
@@ -266,6 +296,10 @@ class ConfigWidgetBase(QWidget, ConfigWidgetInterface):
         if hasattr(self, 'setupUi'):
             self.setupUi(self)
         self.settings = {}
+        self.child_tabs = []
+        for v in self.__dict__.values():
+            if isinstance(v, LazyConfigWidgetBase):
+                self.child_tabs.append(v)
 
     def register(self, name, config_obj, gui_name=None, choices=None,
             restart_required=False, empty_string_is_None=True, setting=Setting):
@@ -273,7 +307,7 @@ class ConfigWidgetBase(QWidget, ConfigWidgetInterface):
         Register a setting.
 
         :param name: The setting name
-        :param config: The config object that reads/writes the setting
+        :param config_obj: The config object that reads/writes the setting
         :param gui_name: The name of the GUI object that presents an interface
                          to change the setting. By default it is assumed to be
                          ``'opt_' + name``.
@@ -309,14 +343,41 @@ class ConfigWidgetBase(QWidget, ConfigWidgetInterface):
         for setting in self.settings.values():
             setting.restore_defaults()
 
+    def register_child_tab(self, tab):
+        self.child_tabs.append(tab)
+
 
 def get_plugin(category, name):
     for plugin in preferences_plugins():
         if plugin.category == category and plugin.name == name:
             return plugin
     raise ValueError(
-            'No Preferences Plugin with category: %s and name: %s found' %
-            (category, name))
+            f'No Preferences Plugin with category: {category} and name: {name} found')
+
+
+class LazyConfigWidgetBase(ConfigWidgetBase):
+    '''
+    Use this for dialogs that are tabs, accessed either from the left or on the
+    top. It directly replaces ConfigWidgetBase, supporting the lazy operations.
+    '''
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.lazy_init_called = False
+
+    def set_changed_signal(self, changed_signal):
+        self.changed_signal.connect(changed_signal)
+
+    def showEvent(self, event):
+        # called when the widget is actually displays. We can't do something like
+        # lazy_genesis because Qt does "things" before showEvent() is called. In
+        # particular, the register function doesn't work with combo boxes if
+        # genesis isn't called before everythign else. Why is a mystery.
+        if not self.lazy_init_called:
+            if hasattr(self, 'lazy_initialize'):
+                self.lazy_initialize()
+        self.lazy_init_called = True
+        super().showEvent(event)
 
 
 class ConfigDialog(QDialog):
@@ -333,8 +394,8 @@ class ConfigDialog(QDialog):
 
 
 def init_gui():
-    from calibre.gui2.ui import Main
     from calibre.gui2.main import option_parser
+    from calibre.gui2.ui import Main
     from calibre.library import db
     parser = option_parser()
     opts, args = parser.parse_args([])
@@ -362,7 +423,7 @@ def show_config_widget(category, name, gui=None, show_restart_msg=False,
     pl = get_plugin(category, name)
     d = ConfigDialog(parent)
     d.resize(750, 550)
-    conf_name = 'config_widget_dialog_geometry_%s_%s'%(category, name)
+    conf_name = f'config_widget_dialog_geometry_{category}_{name}'
     d.setWindowTitle(_('Configure ') + pl.gui_name)
     d.setWindowIcon(QIcon.ic('config.png'))
     bb = QDialogButtonBox(d)
@@ -392,7 +453,9 @@ def show_config_widget(category, name, gui=None, show_restart_msg=False,
         gui = init_gui()
         mygui = True
     w.genesis(gui)
+    w.do_on_child_tabs('genesis', gui)
     w.initialize()
+    w.do_on_child_tabs('initialize')
     d.restore_geometry(gprefs, conf_name)
     d.exec()
     d.save_geometry(gprefs, conf_name)
@@ -457,7 +520,6 @@ class TableWidgetWithMoveByKeyPress(QTableWidget):
 
 
 # Testing {{{
-
 
 def test_widget(category, name, gui=None):
     show_config_widget(category, name, gui=gui, show_restart_msg=True)

@@ -8,16 +8,14 @@ __docformat__ = 'restructuredtext en'
 import os
 from collections import defaultdict
 from functools import partial
+
 from qt.core import QApplication, QDialog, QPixmap, QTimer
 
 from calibre import as_unicode, guess_type, prepare_string_for_xml
 from calibre.constants import iswindows
 from calibre.ebooks import BOOK_EXTENSIONS
 from calibre.ebooks.metadata import MetaInformation, normalize_isbn
-from calibre.gui2 import (
-    choose_dir, choose_files, choose_files_and_remember_all_files, error_dialog, gprefs,
-    info_dialog, question_dialog, warning_dialog,
-)
+from calibre.gui2 import choose_dir, choose_files, choose_files_and_remember_all_files, error_dialog, gprefs, info_dialog, question_dialog, warning_dialog
 from calibre.gui2.actions import InterfaceAction
 from calibre.gui2.dialogs.add_empty_book import AddEmptyBookDialog
 from calibre.gui2.dialogs.confirm_delete import confirm
@@ -50,8 +48,8 @@ class AddAction(InterfaceAction):
 
     name = 'Add Books'
     action_spec = (_('Add books'), 'add_book.png',
-            _('Add books to the calibre library/device from files on your computer')
-            , _('A'))
+            _('Add books to the calibre library/device from files on your computer'),
+            _('A'))
     action_type = 'current'
     action_add_menu = True
     action_menu_clone_qaction = _('Add books from a single folder')
@@ -147,6 +145,14 @@ class AddAction(InterfaceAction):
         if books:
             self._add_formats(books, ids)
 
+    def _add_extra_files(self, book_ids, paths):
+        rmap = {'data/' + os.path.basename(x): x for x in paths}
+        db = self.gui.current_db.new_api
+        for book_id in book_ids:
+            db.add_extra_files(book_id, rmap)
+        self.gui.library_view.model().refresh_ids(book_ids,
+                                current_row=self.gui.library_view.currentIndex().row())
+
     def add_extra_files(self):
         ids = self._check_add_formats_ok()
         if not ids:
@@ -154,12 +160,7 @@ class AddAction(InterfaceAction):
         books = choose_files_and_remember_all_files(self.gui, 'add extra data files dialog dir',
                 _('Select extra data files'), filters=get_filters())
         if books:
-            rmap = {'data/' + os.path.basename(x): x for x in books}
-            db = self.gui.current_db.new_api
-            for book_id in ids:
-                db.add_extra_files(book_id, rmap)
-            self.gui.library_view.model().refresh_ids(ids,
-                                  current_row=self.gui.library_view.currentIndex().row())
+            self._add_extra_files(ids, books)
 
     def _add_formats(self, paths, ids):
         if len(ids) > 1 and not question_dialog(
@@ -317,7 +318,7 @@ class AddAction(InterfaceAction):
         self.add_recursive(False)
 
     def add_recursive_question(self):
-        single =  question_dialog(self.gui, _('Multi-file books?'), _(
+        single = question_dialog(self.gui, _('Multi-file books?'), _(
             'Assume all e-book files in a single folder are multiple formats of the same book?'))
         self.add_recursive(single)
 
@@ -509,16 +510,24 @@ class AddAction(InterfaceAction):
                 accept = True
         if accept and event is not None:
             event.accept()
-        add_as_book = False
+        add_as_book = add_as_data_files = False
         if do_confirm and formats:
-            ok, add_as_book = confirm(
+            ok, add_as = confirm(
                 _('You have dropped some files onto the book <b>%s</b>. This will'
                   ' add or replace the files for this book. Do you want to proceed?') % db.title(cid, index_is_id=True),
                 'confirm_drop_on_book', parent=self.gui,
-                extra_button=ngettext('Add as new book', 'Add as new books', len(formats)))
-            if ok and add_as_book:
-                add_as_book = [path for ext, path in formats]
-            if not ok or add_as_book:
+                extra_button=_('Add as...'), extra_button_choices={
+                    'book': ngettext('Add as new book', 'Add as new books', len(formats)),
+                    'data_files': ngettext('Add as data file', 'Add as data files', len(formats)),
+            })
+            if ok:
+                if add_as == 'book':
+                    add_as_book = [path for ext, path in formats]
+                    formats = []
+                elif add_as == 'data_files':
+                    add_as_data_files = [path for ext, path in formats]
+                    formats = []
+            else:
                 formats = []
         for ext, path in formats:
             db.add_format_with_hooks(cid, ext, path, index_is_id=True)
@@ -528,6 +537,8 @@ class AddAction(InterfaceAction):
             self.gui.refresh_cover_browser()
         if add_as_book:
             self.files_dropped(add_as_book)
+        if add_as_data_files:
+            self._add_extra_files({cid}, add_as_data_files)
 
     def __add_filesystem_book(self, paths, allow_device=True):
         if isinstance(paths, string_or_bytes):
@@ -659,7 +670,7 @@ class AddAction(InterfaceAction):
             vmsg = getattr(self.gui.device_manager.device, 'VIRTUAL_BOOK_EXTENSION_MESSAGE', None) or _(
                 'The following books are virtual and cannot be added'
                 ' to the calibre library:')
-            info_dialog(self.gui,  _('Not Implemented'), vmsg, '\n'.join(remove), show=True)
+            info_dialog(self.gui, _('Not Implemented'), vmsg, '\n'.join(remove), show=True)
             if not paths:
                 return
         if not paths or len(paths) == 0:

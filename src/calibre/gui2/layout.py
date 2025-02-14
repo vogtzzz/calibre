@@ -6,9 +6,24 @@ __copyright__ = '2010, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
 from functools import partial
+
 from qt.core import (
-    QActionGroup, QCoreApplication, QFrame, QHBoxLayout, QIcon, QLabel, QLineEdit,
-    QMenu, QObject, QSizePolicy, Qt, QToolButton, QVBoxLayout, QWidget, pyqtSignal
+    QActionGroup,
+    QApplication,
+    QCoreApplication,
+    QFrame,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QLineEdit,
+    QMenu,
+    QObject,
+    QSizePolicy,
+    Qt,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
 )
 
 from calibre import human_readable
@@ -16,6 +31,7 @@ from calibre.constants import __appname__
 from calibre.gui2.bars import BarsManager
 from calibre.gui2.search_box import SearchBox2
 from calibre.utils.config_base import tweaks
+from calibre.utils.localization import pgettext
 
 
 class LocationManager(QObject):  # {{{
@@ -61,7 +77,7 @@ class LocationManager(QObject):  # {{{
                 a.triggered.connect(self._configure_requested)
                 self._mem.append(a)
                 a = m.addAction(QIcon.ic('sync.png'), _('Update cached metadata on device'))
-                a.triggered.connect(lambda x : self.update_device_metadata.emit())
+                a.triggered.connect(lambda x: self.update_device_metadata.emit())
                 self._mem.append(a)
 
             else:
@@ -145,7 +161,7 @@ class LocationManager(QObject):  # {{{
         for i, loc in enumerate(('main', 'carda', 'cardb')):
             t = self.tooltips[loc]
             if self.free[i] > -1:
-                t += '\n\n%s '%human_readable(self.free[i]) + _('available')
+                t += f'\n\n{human_readable(self.free[i])} ' + _('available')
             ac = getattr(self, 'location_'+loc)
             ac.setToolTip(t)
             ac.setWhatsThis(t)
@@ -196,7 +212,7 @@ class SearchBar(QFrame):  # {{{
         x.setText(_('Virtual library'))
         x.setAutoRaise(True)
         x.setIcon(QIcon.ic('vl.png'))
-        x.setObjectName("virtual_library")
+        x.setObjectName('virtual_library')
         x.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         l.addWidget(x)
 
@@ -225,9 +241,9 @@ class SearchBar(QFrame):  # {{{
 
         x = parent.search = SearchBox2(self, as_url=search_as_url)
         x.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-        x.setObjectName("search")
-        x.setToolTip(_("<p>Search the list of books by title, author, publisher, "
-                       "tags, comments, etc.<br><br>Words separated by spaces are ANDed"))
+        x.setObjectName('search')
+        x.setToolTip(_('<p>Search the list of books by title, author, publisher, '
+                       'tags, comments, etc.<br><br>Words separated by spaces are ANDed'))
         x.setMinimumContentsLength(10)
         l.addWidget(x)
 
@@ -239,7 +255,7 @@ class SearchBar(QFrame):  # {{{
         parent.addAction(ac)
         ac.setToolTip(_('Advanced search'))
         parent.keyboard.register_shortcut('advanced search toggle',
-                _('Advanced search'), default_keys=("Shift+Ctrl+F",),
+                _('Advanced search'), default_keys=('Shift+Ctrl+F',),
                 action=ac)
 
         # This error icon will be placed after the clear button icon
@@ -263,7 +279,7 @@ class SearchBar(QFrame):  # {{{
 
         x = parent.highlight_only_button = QToolButton(self)
         x.setAutoRaise(True)
-        x.setText(_('Highlight'))
+        x.setText(pgettext('mark books matching search result instead of filtering them', 'Highlight'))
         x.setCursor(Qt.CursorShape.PointingHandCursor)
         x.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         x.setIcon(QIcon.ic('arrow-down.png'))
@@ -342,10 +358,13 @@ class MainWindowMixin:  # {{{
         smw.setAlignment(Qt.AlignmentFlag.AlignCenter)
         smw.setVisible(False)
         smw.setAutoFillBackground(True)
-        smw.setStyleSheet('QLabel { background-color: rgba(200, 200, 200, 200); color: black }')
 
     def show_shutdown_message(self, message=''):
         smw = self.shutdown_message_widget
+        bg, fg = 200, 'black'
+        if QApplication.instance().is_dark_theme:
+            bg, fg = 30, 'lightgray'
+        smw.setStyleSheet(f'QLabel {{ background-color: rgba({bg}, {bg}, {bg}, 200); color: {fg} }}')
         smw.setGeometry(0, 0, self.width(), self.height())
         smw.setVisible(True)
         smw.raise_()

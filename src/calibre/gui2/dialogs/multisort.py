@@ -2,10 +2,7 @@
 # License: GPL v3 Copyright: 2021, Kovid Goyal <kovid at kovidgoyal.net>
 
 
-from qt.core import (
-    QAbstractItemView, QDialogButtonBox, QInputDialog, QLabel, QListWidget,
-    QListWidgetItem, QMenu, QSize, Qt, QVBoxLayout
-)
+from qt.core import QAbstractItemView, QDialogButtonBox, QInputDialog, QLabel, QListWidget, QListWidgetItem, QMenu, QSize, Qt, QVBoxLayout
 
 from calibre import prepare_string_for_xml
 from calibre.gui2 import error_dialog
@@ -111,7 +108,7 @@ class ChooseMultiSort(Dialog):
             if i != 0:
                 t += ' :: '
             q = bytes.hex(k.encode('utf-8'))
-            dname = prepare_string_for_xml(name).replace(" ", "&nbsp;")
+            dname = prepare_string_for_xml(name).replace(' ', '&nbsp;')
             t += f' <a href="{q}" style="text-decoration: none">{dname}&nbsp;{symbol}</a>'
         if t:
             t = _('Effective sort') + ': ' + t

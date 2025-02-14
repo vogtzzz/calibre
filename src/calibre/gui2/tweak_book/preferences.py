@@ -10,24 +10,46 @@ from copy import copy, deepcopy
 from functools import partial
 from itertools import product
 from operator import attrgetter, methodcaller
+
 from qt.core import (
-    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
-    QFont, QFontComboBox, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QIcon,
-    QLabel, QListView, QListWidget, QListWidgetItem, QPushButton, QRadioButton, QSize,
-    QSizePolicy, QSpacerItem, QSpinBox, QStackedWidget, Qt, QTimer, QToolButton,
-    QVBoxLayout, QWidget, pyqtSignal,
+    QAbstractItemView,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFont,
+    QFontComboBox,
+    QFormLayout,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QListView,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QRadioButton,
+    QSize,
+    QSizePolicy,
+    QSpacerItem,
+    QSpinBox,
+    QStackedWidget,
+    Qt,
+    QTimer,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
 )
 
 from calibre import prepare_string_for_xml
 from calibre.gui2 import info_dialog
 from calibre.gui2.font_family_chooser import FontFamilyChooser
 from calibre.gui2.keyboard import ShortcutConfig
-from calibre.gui2.tweak_book import (
-    actions, editor_toolbar_actions, toolbar_actions, tprefs,
-)
-from calibre.gui2.tweak_book.editor.themes import (
-    ThemeEditor, all_theme_names, default_theme,
-)
+from calibre.gui2.tweak_book import actions, editor_toolbar_actions, toolbar_actions, tprefs
+from calibre.gui2.tweak_book.editor.themes import ThemeEditor, all_theme_names, default_theme
 from calibre.gui2.tweak_book.spell import ManageDictionaries
 from calibre.gui2.tweak_book.widgets import Dialog
 from calibre.gui2.widgets2 import ColorButton
@@ -62,10 +84,10 @@ class BasicSettings(QWidget):  # {{{
                 setter = setter or (lambda x, v:x.setValue(v))
                 widget.valueChanged.connect(self.emit_changed)
             else:
-                raise TypeError('Unknown setting type for setting: %s' % name)
+                raise TypeError(f'Unknown setting type for setting: {name}')
         else:
             if getter is None or setter is None:
-                raise ValueError("getter or setter not provided for: %s" % name)
+                raise ValueError(f'getter or setter not provided for: {name}')
         self._prevent_changed = True
         setter(widget, inval)
         self._prevent_changed = False
@@ -114,7 +136,7 @@ class BasicSettings(QWidget):  # {{{
             order_map = {x:i for i, x in enumerate(val)}
             items = list(w.defaults)
             limit = len(items)
-            items.sort(key=lambda x:order_map.get(x, limit))
+            items.sort(key=lambda x: order_map.get(x, limit))
             w.clear()
             for x in items:
                 i = QListWidgetItem(w)
@@ -174,6 +196,10 @@ class EditorSettings(BasicSettings):  # {{{
         fs = self('editor_font_size')
         fs.setMinimum(8), fs.setSuffix(' pt'), fs.setMaximum(50)
         l.addRow(_('Editor font &size:'), fs)
+
+        cs = self('editor_cursor_width')
+        cs.setMinimum(1), cs.setSuffix(' px'), cs.setMaximum(50)
+        l.addRow(_('Editor cursor &width:'), cs)
 
         choices = self.theme_choices()
         theme = self.choices_widget('editor_theme', choices, 'auto', 'auto')
@@ -376,7 +402,7 @@ class PreviewSettings(BasicSettings):  # {{{
         for fam in sorted(families):
             text = families[fam]
             w = QFontComboBox(self)
-            self('engine_preview_%s_family' % fam, widget=w, getter=partial(family_getter, fam), setter=partial(family_setter, fam))
+            self(f'engine_preview_{fam}_family', widget=w, getter=partial(family_getter, fam), setter=partial(family_setter, fam))
             l.addRow(_('Font family for &%s:') % text, w)
 
         w = self.choices_widget('preview_standard_font_family', families, 'serif', 'serif')
@@ -444,8 +470,7 @@ class PreviewSettings(BasicSettings):  # {{{
 # }}}
 
 
-# ToolbarSettings  {{{
-
+# ToolbarSettings {{{
 
 class ToolbarList(QListWidget):
 
@@ -573,10 +598,10 @@ class ToolbarSettings(QWidget):
         if name == 'global_book_toolbar' and 'donate' not in applied:
             QListWidgetItem(QIcon.ic('donate.png'), _('Donate'), self.available).setData(Qt.ItemDataRole.UserRole, 'donate')
 
-        QListWidgetItem(blank, '--- %s ---' % _('Separator'), self.available)
+        QListWidgetItem(blank, '--- {} ---'.format(_('Separator')), self.available)
         for key in items:
             if key is None:
-                QListWidgetItem(blank, '--- %s ---' % _('Separator'), self.current)
+                QListWidgetItem(blank, '--- {} ---'.format(_('Separator')), self.current)
             else:
                 if key == 'donate':
                     QListWidgetItem(QIcon.ic('donate.png'), _('Donate'), self.current).setData(Qt.ItemDataRole.UserRole, 'donate')
@@ -696,7 +721,7 @@ class TemplatesDialog(Dialog):  # {{{
         self.helpl = la = QLabel(_(
             'The variables {0} and {1} will be replaced with the title and author of the book. {2}'
             ' is where the cursor will be positioned. If you want to include braces in your template,'
-            ' for example for CSS rules, you have to escape them, like this: {3}').format(*('<code>%s</code>'%x for x in
+            ' for example for CSS rules, you have to escape them, like this: {3}').format(*(f'<code>{x}</code>' for x in
                 ['{TITLE}', '{AUTHOR}', '%CURSOR%', 'body {{ color: red }}'])))
         la.setWordWrap(True)
         l.addWidget(la)

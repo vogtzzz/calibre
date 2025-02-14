@@ -10,17 +10,20 @@ __docformat__ = 'restructuredtext en'
 Input plugin for HTML or OPF ebooks.
 '''
 
-import os, re, sys,  errno as gerrno
+import errno as gerrno
+import os
+import re
+import sys
 
-from calibre.ebooks.oeb.base import urlunquote
-from calibre.ebooks.chardet import detect_xml_encoding
+from calibre import replace_entities, unicode_path
 from calibre.constants import iswindows
-from calibre import unicode_path, replace_entities
+from calibre.ebooks.chardet import detect_xml_encoding
+from calibre.ebooks.oeb.base import urlunquote
+from calibre.utils.filenames import case_ignoring_open_file
 from polyglot.urllib import urlparse, urlunparse
 
 
 class Link:
-
     '''
     Represents a link in a HTML file.
     '''
@@ -63,7 +66,7 @@ class Link:
         return self.path == getattr(other, 'path', other)
 
     def __str__(self):
-        return 'Link: %s --> %s'%(self.url, self.path)
+        return f'Link: {self.url} --> {self.path}'
 
 
 class IgnoreFile(Exception):
@@ -75,7 +78,6 @@ class IgnoreFile(Exception):
 
 
 class HTMLFile:
-
     '''
     Contains basic information about an HTML file. This
     includes a list of links to other files as well as
@@ -87,26 +89,27 @@ class HTMLFile:
 
     HTML_PAT  = re.compile(r'<\s*html', re.IGNORECASE)
     HTML_PAT_BIN  = re.compile(br'<\s*html', re.IGNORECASE)
-    TITLE_PAT = re.compile('<title>([^<>]+)</title>', re.IGNORECASE)
+    TITLE_PAT = re.compile(r'<title>([^<>]+)</title>', re.IGNORECASE)
     LINK_PAT  = re.compile(
     r'<\s*a\s+.*?href\s*=\s*(?:(?:"(?P<url1>[^"]+)")|(?:\'(?P<url2>[^\']+)\')|(?P<url3>[^\s>]+))',
     re.DOTALL|re.IGNORECASE)
 
-    def __init__(self, path_to_html_file, level, encoding, verbose, referrer=None):
+    def __init__(self, path_to_html_file, level, encoding, verbose, referrer=None, correct_case_mismatches=False):
         '''
         :param level: The level of this file. Should be 0 for the root file.
         :param encoding: Use `encoding` to decode HTML.
         :param referrer: The :class:`HTMLFile` that first refers to this file.
         '''
         self.path     = unicode_path(path_to_html_file, abs=True)
-        self.title    = os.path.splitext(os.path.basename(self.path))[0]
-        self.base     = os.path.dirname(self.path)
         self.level    = level
         self.referrer = referrer
         self.links    = []
 
         try:
-            with open(self.path, 'rb') as f:
+            with (case_ignoring_open_file if correct_case_mismatches else open)(self.path, 'rb') as f:
+                self.path = f.name
+                self.base = os.path.dirname(self.path)
+                self.title = os.path.splitext(os.path.basename(self.path))[0]
                 src = header = f.read(4096)
                 encoding = detect_xml_encoding(src)[1]
                 if encoding:
@@ -128,7 +131,7 @@ class HTMLFile:
 
         if not src:
             if level == 0:
-                raise ValueError('The file %s is empty'%self.path)
+                raise ValueError(f'The file {self.path} is empty')
             self.is_binary = True
 
         if not self.is_binary:
@@ -150,7 +153,7 @@ class HTMLFile:
         return hash(self.path)
 
     def __str__(self):
-        return 'HTMLFile:%d:%s:%r'%(self.level, 'b' if self.is_binary else 'a', self.path)
+        return f"HTMLFile:{self.level}:{'b' if self.is_binary else 'a'}:{self.path!r}"
 
     def __repr__(self):
         return str(self)
@@ -238,7 +241,7 @@ def find_tests():
     return unittest.defaultTestLoader.loadTestsFromTestCase(TestHTMLInput)
 
 
-def traverse(path_to_html_file, max_levels=sys.maxsize, verbose=0, encoding=None):
+def traverse(path_to_html_file, max_levels=sys.maxsize, verbose=0, encoding=None, correct_case_mismatches=False):
     '''
     Recursively traverse all links in the HTML file.
 
@@ -251,7 +254,8 @@ def traverse(path_to_html_file, max_levels=sys.maxsize, verbose=0, encoding=None
     '''
     assert max_levels >= 0
     level = 0
-    flat =  [HTMLFile(path_to_html_file, level, encoding, verbose)]
+    flat = [HTMLFile(path_to_html_file, level, encoding, verbose, correct_case_mismatches=correct_case_mismatches)]
+    seen = {flat[0].path}
     next_level = list(flat)
     while level < max_levels and len(next_level) > 0:
         level += 1
@@ -259,12 +263,15 @@ def traverse(path_to_html_file, max_levels=sys.maxsize, verbose=0, encoding=None
         for hf in next_level:
             rejects = []
             for link in hf.links:
-                if link.path is None or link.path in flat:
+                if link.path is None or link.path in seen:
                     continue
                 try:
-                    nf = HTMLFile(link.path, level, encoding, verbose, referrer=hf)
+                    nf = HTMLFile(link.path, level, encoding, verbose, referrer=hf, correct_case_mismatches=correct_case_mismatches)
+                    if nf.path in seen:
+                        continue
+                    seen.add(nf.path)
                     if nf.is_binary:
-                        raise IgnoreFile('%s is a binary file'%nf.path, -1)
+                        raise IgnoreFile(f'{nf.path} is a binary file', -1)
                     nl.append(nf)
                     flat.append(nf)
                 except IgnoreFile as err:
@@ -285,7 +292,7 @@ def get_filelist(htmlfile, dir, opts, log):
     '''
     log.info('Building file list...')
     filelist = traverse(htmlfile, max_levels=int(opts.max_levels),
-                        verbose=opts.verbose,
+                        verbose=opts.verbose, correct_case_mismatches=getattr(opts, 'correct_case_mismatches', False),
                         encoding=opts.input_encoding)[0 if opts.breadth_first else 1]
     if opts.verbose:
         log.debug('\tFound files...')

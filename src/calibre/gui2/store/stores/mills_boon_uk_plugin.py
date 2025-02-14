@@ -8,13 +8,13 @@ __copyright__ = '2011, John Schember <john@nachtimwald.com>'
 __docformat__ = 'restructuredtext en'
 
 from contextlib import closing
+
 try:
     from urllib.parse import quote
 except ImportError:
     from urllib import quote
 
 from lxml import html
-
 from qt.core import QUrl
 
 from calibre import browser, url_slash_cleaner
@@ -60,7 +60,7 @@ class MillsBoonUKStore(BasicStoreConfig, StorePlugin):
                     continue
 
                 cover_url = ''.join(data.xpath('.//div[@class="img-wrapper"]/a/img/@src'))
-                title =  ''.join(data.xpath('.//div[@class="img-wrapper"]/a/img/@alt')).strip()
+                title = ''.join(data.xpath('.//div[@class="img-wrapper"]/a/img/@alt')).strip()
                 author = ''.join(data.xpath('.//a[@class="author"]/text()'))
                 price = ''.join(data.xpath('.//div[@class="type-wrapper"]/ul/li[child::span[text()="eBook"]]/a/text()'))
                 format_ = ''.join(data.xpath('.//p[@class="doc-meta-format"]/span[last()]/text()'))

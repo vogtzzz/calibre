@@ -13,6 +13,7 @@ from calibre.constants import iswindows
 
 from .copy_files import copy_tree, rename_files
 from .filenames import nlinks_file
+
 if iswindows:
     from calibre_extensions import winutil
 
@@ -117,6 +118,7 @@ class TestCopyFiles(unittest.TestCase):
                 self.ae(set(os.listdir(self.d())), {'sub', 'lockdir'})
                 self.assertFalse(tuple(walk(self.d())))
             self.ae(before, frozenset(walk(src)), 'Source files were deleted despite there being an error')
+
 
 def find_tests():
     return unittest.defaultTestLoader.loadTestsFromTestCase(TestCopyFiles)

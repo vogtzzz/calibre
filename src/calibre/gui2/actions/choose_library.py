@@ -10,19 +10,39 @@ import sys
 import weakref
 from contextlib import suppress
 from functools import lru_cache, partial
+
 from qt.core import (
-    QAction, QCoreApplication, QDialog, QDialogButtonBox, QGridLayout, QIcon,
-    QInputDialog, QLabel, QLineEdit, QMenu, QSize, Qt, QTimer, QToolButton, QVBoxLayout,
+    QAction,
+    QCoreApplication,
+    QDialog,
+    QDialogButtonBox,
+    QGridLayout,
+    QIcon,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMenu,
+    QSize,
+    Qt,
+    QTimer,
+    QToolButton,
+    QVBoxLayout,
     pyqtSignal,
 )
 
 from calibre import isbytestring, sanitize_file_name
-from calibre.constants import (
-    config_dir, filesystem_encoding, get_portable_base, isportable, iswindows,
-)
+from calibre.constants import config_dir, filesystem_encoding, get_portable_base, isportable, iswindows
 from calibre.gui2 import (
-    Dispatcher, choose_dir, choose_images, error_dialog, gprefs, info_dialog,
-    open_local_file, pixmap_to_data, question_dialog, warning_dialog,
+    Dispatcher,
+    choose_dir,
+    choose_images,
+    error_dialog,
+    gprefs,
+    info_dialog,
+    open_local_file,
+    pixmap_to_data,
+    question_dialog,
+    warning_dialog,
 )
 from calibre.gui2.actions import InterfaceAction
 from calibre.library import current_library_name
@@ -101,7 +121,7 @@ class LibraryUsageStats:  # {{{
         if lpath in locs:
             locs.remove(lpath)
         limit = tweaks['many_libraries'] if limit is None else limit
-        key = (lambda x:sort_key(os.path.basename(x))) if len(locs) > limit else self.stats.get
+        key = (lambda x: sort_key(os.path.basename(x))) if len(locs) > limit else self.stats.get
         locs.sort(key=key, reverse=len(locs)<=limit)
         for loc in locs:
             yield self.pretty(loc), loc
@@ -206,7 +226,7 @@ class BackupStatus(QDialog):  # {{{
             return
         dirty_text = 'no'
         try:
-            dirty_text = '%s' % db.dirty_queue_length()
+            dirty_text = f'{db.dirty_queue_length()}'
         except:
             dirty_text = _('none')
         self.msg.setText('<p>' + _(
@@ -305,7 +325,7 @@ class ChooseLibraryAction(InterfaceAction):
         self.switch_actions = []
         for i in range(5):
             ac = self.create_action(spec=('', None, None, None),
-                    attr='switch_action%d'%i)
+                    attr=f'switch_action{i}')
             ac.setObjectName(str(i))
             self.switch_actions.append(ac)
             ac.setVisible(False)
@@ -587,8 +607,7 @@ class ChooseLibraryAction(InterfaceAction):
             os.rename(loc, newloc)
         except:
             import traceback
-            det_msg = 'Location: %r New Location: %r\n%s'%(loc, newloc,
-                                                        traceback.format_exc())
+            det_msg = f'Location: {loc!r} New Location: {newloc!r}\n{traceback.format_exc()}'
             error_dialog(self.gui, _('Rename failed'),
                     _('Failed to rename the library at %s. '
                 'The most common cause for this is if one of the files'
@@ -606,7 +625,7 @@ class ChooseLibraryAction(InterfaceAction):
                 self.gui, _('Library removed'), _(
                 'The library %s has been removed from calibre. '
                 'The files remain on your computer, if you want '
-                'to delete them, you will have to do so manually.') % ('<code>%s</code>' % loc),
+                'to delete them, you will have to do so manually.') % (f'<code>{loc}</code>'),
                 override_icon='dialog_information.png',
                 yes_text=_('&OK'), no_text=_('&Undo'), yes_icon='ok.png', no_icon='edit-undo.png'):
             return
@@ -658,6 +677,7 @@ class ChooseLibraryAction(InterfaceAction):
         db = m.db
         db.prefs.disable_setting = True
         library_path = db.library_path
+        before = db.new_api.size_stats()
 
         d = DBCheck(self.gui, db)
         try:
@@ -672,10 +692,22 @@ class ChooseLibraryAction(InterfaceAction):
         if d.rejected:
             return
         if d.error is None:
+            after = self.gui.current_db.new_api.size_stats()
+            det_msg = ''
+            from calibre import human_readable
+            for which, title in {'main': _('books'), 'fts': _('full text search'), 'notes': _('notes')}.items():
+                if which != 'main' and not getattr(d, which).isChecked():
+                    continue
+                det_msg += '\n'
+                if before[which] == after[which]:
+                    det_msg += _('Size of the {} database was unchanged.').format(title)
+                else:
+                    det_msg += _('Size of the {0} database reduced from {1} to {2}.').format(
+                            title, human_readable(before[which]), human_readable(after[which]))
             if not question_dialog(self.gui, _('Success'),
                     _('Found no errors in your calibre library database.'
                         ' Do you want calibre to check if the files in your'
-                        ' library match the information in the database?')):
+                        ' library match the information in the database?'), det_msg=det_msg.strip()):
                 return
         else:
             return error_dialog(self.gui, _('Failed'),

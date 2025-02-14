@@ -36,6 +36,12 @@ def implementation(
     db, notify_changes, fields, sort_by, ascending, search_text, limit, template=None
 ):
     is_remote = notify_changes is not None
+    if is_remote:
+        # templates allow arbitrary code execution via python templates. We
+        # could possibly disallow only python templates but that is more work
+        # than I feel like doing for this, so simply ignore templates on remote
+        # connections.
+        template = None
     formatter = None
     with db.safe_read_lock:
         fm = db.field_metadata
@@ -43,10 +49,7 @@ def implementation(
         for k in fm.custom_field_keys():
             afields.add('*' + k[1:])
         if 'all' in fields:
-            if template:
-                fields = sorted(afields - {'template'})
-            else:
-                fields = sorted(afields)
+            fields = sorted(afields if template else (afields - {'template'}))
         sort_by = sort_by or 'id'
         sort_fields = sort_by.split(',')
         for sf in sort_fields:
@@ -71,6 +74,9 @@ def implementation(
                 data[field] = {k: v.get('isbn') or '' for k, v in iteritems(x)}
                 continue
             if field == 'template':
+                if not template:
+                    data['template'] = _('Template not allowed') if is_remote else _('No template specified')
+                    continue
                 vals = {}
                 global_vars = {}
                 if formatter is None:
@@ -91,7 +97,7 @@ def implementation(
                     data[field] = {k: cover(db, k) for k in book_ids}
                     continue
             data[field] = db.all_field_for(field, book_ids)
-    return {'book_ids': book_ids, "data": data, 'metadata': metadata, 'fields':fields}
+    return {'book_ids': book_ids, 'data': data, 'metadata': metadata, 'fields':fields}
 
 
 def stringify(data, metadata, for_machine):
@@ -164,6 +170,8 @@ def do_list(
 ):
     if sort_by is None:
         ascending = True
+    if dbctx.is_remote and (template or template_file):
+        raise SystemExit(_('The use of templates is disallowed when connecting to remote servers for security reasons'))
     if 'template' in (f.strip() for f in fields):
         if template_file:
             with open(template_file, 'rb') as f:
@@ -197,7 +205,7 @@ def do_list(
     from calibre.utils.terminal import ColoredStream, geometry
 
     output_table = prepare_output_table(fields, book_ids, data, metadata)
-    widths = list(map(lambda x: 0, fields))
+    widths = [0 for x in fields]
 
     for record in output_table:
         for j in range(len(fields)):
@@ -207,7 +215,7 @@ def do_list(
     if not screen_width:
         screen_width = 80
     field_width = screen_width // len(fields)
-    base_widths = list(map(lambda x: min(x + 1, field_width), widths))
+    base_widths = [min(x + 1, field_width) for x in widths]
 
     while sum(base_widths) < screen_width:
         adjusted = False
@@ -223,7 +231,7 @@ def do_list(
 
     widths = list(base_widths)
     titles = map(
-        lambda x, y: '%-*s%s' % (x - len(separator), y, separator), widths,
+        lambda x, y: '%-*s%s' % (x - len(separator), y, separator), widths,  # noqa: UP031
         [template_title if v == 'template' else v for v in fields]
     )
     with ColoredStream(sys.stdout, fg='green'):
@@ -243,7 +251,7 @@ def do_list(
                 ft = text[i][l] if l < len(text[i]) else ''
                 stdout.write(ft.encode('utf-8'))
                 if i < len(text) - 1:
-                    filler = ('%*s' % (widths[i] - str_width(ft) - 1, ''))
+                    filler = ' '*(widths[i] - str_width(ft) - 1)
                     stdout.write((filler + separator).encode('utf-8'))
             stdout.write(linesep)
 
@@ -334,7 +342,8 @@ List the books available in the calibre database.
     parser.add_option(
         '--template',
         default=None,
-        help=_('The template to run if "{}" is in the field list. Default: None').format('template')
+        help=_('The template to run if "{}" is in the field list. Note that templates are ignored while connecting to a calibre server.'
+               ' Default: None').format('template')
     )
     parser.add_option(
         '--template_file',

@@ -11,14 +11,29 @@ import textwrap
 import weakref
 from collections import OrderedDict
 from functools import partial
+
 from qt.core import (
-    QApplication, QCheckBox, QDialog, QDialogButtonBox, QFrame, QGridLayout, QIcon,
-    QInputDialog, QLabel, QMenu, QModelIndex, QSize, QSizePolicy, QSpacerItem, Qt,
-    QTextEdit, QTimer,
+    QApplication,
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QFrame,
+    QGridLayout,
+    QIcon,
+    QInputDialog,
+    QLabel,
+    QMenu,
+    QModelIndex,
+    QSize,
+    QSizePolicy,
+    QSpacerItem,
+    Qt,
+    QTextEdit,
+    QTimer,
 )
 
 from calibre.gui2 import Dispatcher, error_dialog, gprefs, question_dialog
-from calibre.gui2.actions import InterfaceAction
+from calibre.gui2.actions import InterfaceActionWithLibraryDrop
 from calibre.gui2.convert.metadata import create_opf_file
 from calibre.gui2.dialogs.progress import ProgressDialog
 from calibre.ptempfile import PersistentTemporaryDirectory
@@ -72,6 +87,7 @@ class Polish(QDialog):  # {{{
             'remove_jacket':_('<h3>Remove book jacket</h3>%s')%HELP['remove_jacket'],
             'remove_unused_css':_('<h3>Remove unused CSS rules</h3>%s')%HELP['remove_unused_css'],
             'compress_images': _('<h3>Losslessly compress images</h3>%s') % HELP['compress_images'],
+            'download_external_resources': _('<h3>Download external resources</h3>%s') % HELP['download_external_resources'],
             'add_soft_hyphens': _('<h3>Add soft-hyphens</h3>%s') % HELP['add_soft_hyphens'],
             'remove_soft_hyphens': _('<h3>Remove soft-hyphens</h3>%s') % HELP['remove_soft_hyphens'],
             'upgrade_book': _('<h3>Upgrade book internals</h3>%s') % HELP['upgrade_book'],
@@ -94,6 +110,7 @@ class Polish(QDialog):  # {{{
             ('remove_jacket', _('&Remove a previously inserted book jacket')),
             ('remove_unused_css', _('Remove &unused CSS rules from the book')),
             ('compress_images', _('Losslessly &compress images')),
+            ('download_external_resources', _('&Download external resources')),
             ('add_soft_hyphens', _('Add s&oft hyphens')),
             ('remove_soft_hyphens', _('Remove so&ft hyphens')),
             ('upgrade_book', _('&Upgrade book internals')),
@@ -107,7 +124,7 @@ class Polish(QDialog):  # {{{
             connect_lambda(x.stateChanged, self, lambda self, state: self.option_toggled(self.sender().objectName(), state))
             l.addWidget(x, count, 0, 1, 1)
             setattr(self, 'opt_'+name, x)
-            la = QLabel(' <a href="#%s">%s</a>'%(name, _('About')))
+            la = QLabel(' <a href="#{}">{}</a>'.format(name, _('About')))
             setattr(self, 'label_'+name, x)
             la.linkActivated.connect(self.help_link_activated)
             l.addWidget(la, count, 1, 1, 1)
@@ -295,7 +312,7 @@ class Polish(QDialog):  # {{{
         for fmt in formats:
             ext = fmt.replace('ORIGINAL_', '').lower()
             is_orig[ext.upper()] = 'ORIGINAL_' in fmt
-            with open(os.path.join(base, '%s.%s'%(book_id, ext)), 'wb') as f:
+            with open(os.path.join(base, f'{book_id}.{ext}'), 'wb') as f:
                 db.copy_format_to(book_id, fmt, f, index_is_id=True)
                 data['files'].append(f.name)
 
@@ -366,7 +383,7 @@ class Report(QDialog):  # {{{
         from calibre.ebooks.markdown import markdown
         self.current_log = job.details
         self.setWindowTitle(_('Polishing of %s')%book_title)
-        self.view.setText(markdown('# %s\n\n'%book_title + report,
+        self.view.setText(markdown(f'# {book_title}\n\n' + report,
                                    output_format='html4'))
         self.bb.button(QDialogButtonBox.StandardButton.Close).setFocus(Qt.FocusReason.OtherFocusReason)
         self.backup_msg.setVisible(bool(fmts))
@@ -409,32 +426,13 @@ class Report(QDialog):  # {{{
 # }}}
 
 
-class PolishAction(InterfaceAction):
+class PolishAction(InterfaceActionWithLibraryDrop):
 
     name = 'Polish Books'
     action_spec = (_('Polish books'), 'polish.png',
                    _('Apply the shine of perfection to your books'), _('P'))
     dont_add_to = frozenset(['context-menu-device'])
     action_type = 'current'
-    accepts_drops = True
-
-    def accept_enter_event(self, event, mime_data):
-        if mime_data.hasFormat("application/calibre+from_library"):
-            return True
-        return False
-
-    def accept_drag_move_event(self, event, mime_data):
-        if mime_data.hasFormat("application/calibre+from_library"):
-            return True
-        return False
-
-    def drop_event(self, event, mime_data):
-        mime = 'application/calibre+from_library'
-        if mime_data.hasFormat(mime):
-            self.dropped_ids = tuple(map(int, mime_data.data(mime).data().split()))
-            QTimer.singleShot(1, self.do_drop)
-            return True
-        return False
 
     def do_drop(self):
         book_id_map = self.get_supported_books(self.dropped_ids)

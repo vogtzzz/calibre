@@ -11,11 +11,35 @@ import shutil
 import textwrap
 import weakref
 from datetime import date, datetime
+
 from qt.core import (
-    QAbstractItemView, QAction, QApplication, QComboBox, QDateTime, QDialog,
-    QDialogButtonBox, QDoubleSpinBox, QGridLayout, QIcon, QKeySequence, QLabel,
-    QLineEdit, QListWidgetItem, QMenu, QMessageBox, QPixmap, QPlainTextEdit, QSize,
-    QSizePolicy, Qt, QToolButton, QUndoCommand, QUndoStack, QUrl, QVBoxLayout, QWidget,
+    QAbstractItemView,
+    QAction,
+    QApplication,
+    QComboBox,
+    QDateTime,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QGridLayout,
+    QIcon,
+    QKeySequence,
+    QLabel,
+    QLineEdit,
+    QListWidgetItem,
+    QMenu,
+    QMessageBox,
+    QPixmap,
+    QPlainTextEdit,
+    QSize,
+    QSizePolicy,
+    Qt,
+    QToolButton,
+    QUndoCommand,
+    QUndoStack,
+    QUrl,
+    QVBoxLayout,
+    QWidget,
     pyqtSignal,
 )
 
@@ -24,31 +48,29 @@ from calibre.constants import iswindows
 from calibre.customize.ui import run_plugins_on_import
 from calibre.db import SPOOL_SIZE
 from calibre.ebooks import BOOK_EXTENSIONS
-from calibre.ebooks.metadata import (
-    authors_to_sort_string, check_isbn, string_to_authors, title_sort,
-)
+from calibre.ebooks.metadata import authors_to_sort_string, check_isbn, string_to_authors, title_sort
 from calibre.ebooks.metadata.meta import get_metadata
-from calibre.gui2 import (
-    choose_files_and_remember_all_files, choose_images, error_dialog,
-    file_icon_provider, gprefs,
-)
+from calibre.gui2 import choose_files_and_remember_all_files, choose_images, error_dialog, file_icon_provider, gprefs
 from calibre.gui2.comments_editor import Editor
 from calibre.gui2.complete2 import EditWithComplete
 from calibre.gui2.dialogs.tag_editor import TagEditor
 from calibre.gui2.languages import LanguagesEdit as LE
-from calibre.gui2.widgets import (
-    EnLineEdit, FormatList as _FormatList, ImageView, LineEditIndicators,
-)
-from calibre.gui2.widgets2 import (
-    DateTimeEdit, Dialog, RatingEditor, RightClickButton, access_key,
-    populate_standard_spinbox_context_menu,
-)
+from calibre.gui2.widgets import EnLineEdit, ImageView, LineEditIndicators
+from calibre.gui2.widgets import FormatList as _FormatList
+from calibre.gui2.widgets2 import DateTimeEdit, Dialog, RatingEditor, RightClickButton, access_key, populate_standard_spinbox_context_menu
 from calibre.library.comments import comments_to_html
 from calibre.ptempfile import PersistentTemporaryFile, SpooledTemporaryFile
 from calibre.utils.config import prefs, tweaks
 from calibre.utils.date import (
-    UNDEFINED_DATE, as_local_time, internal_iso_format_string, is_date_undefined,
-    local_tz, parse_only_date, qt_from_dt, qt_to_dt, utcfromtimestamp,
+    UNDEFINED_DATE,
+    as_local_time,
+    internal_iso_format_string,
+    is_date_undefined,
+    local_tz,
+    parse_only_date,
+    qt_from_dt,
+    qt_to_dt,
+    utcfromtimestamp,
 )
 from calibre.utils.filenames import make_long_path_useable
 from calibre.utils.icu import sort_key, strcmp
@@ -174,9 +196,9 @@ def make_undoable(spinbox):
             m = QMenu(self)
             if hasattr(self, 'setDateTime'):
                 m.addAction(_('Set date to undefined') + '\t' + QKeySequence(Qt.Key.Key_Minus).toString(QKeySequence.SequenceFormat.NativeText),
-                            lambda : self.setDateTime(self.minimumDateTime()))
+                            lambda: self.setDateTime(self.minimumDateTime()))
                 m.addAction(_('Set date to today') + '\t' + QKeySequence(Qt.Key.Key_Equal).toString(QKeySequence.SequenceFormat.NativeText),
-                            lambda : self.setDateTime(QDateTime.currentDateTime()))
+                            lambda: self.setDateTime(QDateTime.currentDateTime()))
             m.addAction(_('&Undo') + access_key(QKeySequence.StandardKey.Undo), self.undo).setEnabled(self.undo_stack.canUndo())
             m.addAction(_('&Redo') + access_key(QKeySequence.StandardKey.Redo), self.redo).setEnabled(self.undo_stack.canRedo())
             m.addSeparator()
@@ -200,8 +222,8 @@ def make_undoable(spinbox):
 
     return UndoableSpinbox
 
-# Title {{{
 
+# Title {{{
 
 class TitleEdit(EnLineEdit, ToMetadataMixin):
 
@@ -335,8 +357,8 @@ class TitleSortEdit(TitleEdit, ToMetadataMixin, LineEditIndicators):
 
 # }}}
 
-# Authors {{{
 
+# Authors {{{
 
 class AuthorsEdit(EditWithComplete, ToMetadataMixin):
 
@@ -385,7 +407,7 @@ class AuthorsEdit(EditWithComplete, ToMetadataMixin):
                 try:
                     self.commit(self.db, self.id_)
                 except OSError as e:
-                    e.locking_violation_msg = _('Could not change on-disk location of this book\'s files.')
+                    e.locking_violation_msg = _("Could not change on-disk location of this book's files.")
                     raise
                 self.db.commit()
                 self.original_val = self.current_val
@@ -457,7 +479,7 @@ class AuthorSortEdit(EnLineEdit, ToMetadataMixin, LineEditIndicators):
     TOOLTIP = _('Specify how the author(s) of this book should be sorted. '
             'For example Charles Dickens should be sorted as Dickens, '
             'Charles.\nIf the box is colored green, then text matches '
-            'the individual author\'s sort strings. If it is colored '
+            "the individual author's sort strings. If it is colored "
             'red, then the authors and this text do not match.')
     LABEL = _('Author s&ort:')
     FIELD_NAME = 'author_sort'
@@ -600,8 +622,8 @@ class AuthorSortEdit(EnLineEdit, ToMetadataMixin, LineEditIndicators):
 
 # }}}
 
-# Series {{{
 
+# Series {{{
 
 class SeriesEdit(EditWithComplete, ToMetadataMixin):
 
@@ -772,8 +794,8 @@ class BuddyLabel(QLabel):  # {{{
         self.setAlignment(Qt.AlignmentFlag.AlignRight|Qt.AlignmentFlag.AlignVCenter)
 # }}}
 
-# Formats {{{
 
+# Formats {{{
 
 class Format(QListWidgetItem):
 
@@ -781,7 +803,7 @@ class Format(QListWidgetItem):
         self.path = path
         self.ext = ext
         self.size = float(size)/(1024*1024)
-        text = '%s (%.2f MB)'%(self.ext.upper(), self.size)
+        text = f'{self.ext.upper()} ({self.size:.2f} MB)'
         QListWidgetItem.__init__(self, file_icon_provider().icon_from_ext(ext),
                                  text, parent, QListWidgetItem.ItemType.UserType.value)
         if timestamp is not None:
@@ -799,6 +821,7 @@ class OrigAction(QAction):
     def __init__(self, fmt, parent):
         self.fmt = fmt.replace('ORIGINAL_', '')
         QAction.__init__(self, _('Restore %s from the original')%self.fmt, parent)
+        self.setIcon(QIcon.ic('edit-undo.png'))
         self.triggered.connect(self._triggered)
 
     def _triggered(self):
@@ -812,6 +835,7 @@ class ViewAction(QAction):
     def __init__(self, item, parent):
         self.item = item
         QAction.__init__(self, _('&View {} format').format(item.ext.upper()), parent)
+        self.setIcon(QIcon.ic('view.png'))
         self.triggered.connect(self._triggered)
 
     def _triggered(self):
@@ -825,6 +849,7 @@ class EditAction(QAction):
     def __init__(self, item, parent):
         self.item = item
         QAction.__init__(self, _('&Edit')+' '+item.ext.upper(), parent)
+        self.setIcon(QIcon.ic('edit_book.png'))
         self.triggered.connect(self._triggered)
 
     def _triggered(self):
@@ -836,6 +861,7 @@ class FormatList(_FormatList):
     restore_fmt = pyqtSignal(object)
     view_fmt = pyqtSignal(object)
     edit_fmt = pyqtSignal(object)
+    open_book_folder = pyqtSignal()
 
     def __init__(self, parent):
         _FormatList.__init__(self, parent)
@@ -851,28 +877,30 @@ class FormatList(_FormatList):
         originals = [self.item(x).ext.upper() for x in range(self.count())]
         originals = [x for x in originals if x.startswith('ORIGINAL_')]
 
-        if item or originals:
-            self.cm = cm = QMenu(self)
+        self.cm = cm = QMenu(self)
 
-            if item:
-                action = ViewAction(item, cm)
-                action.view_fmt.connect(self.view_fmt, type=Qt.ConnectionType.QueuedConnection)
+        if item:
+            action = ViewAction(item, cm)
+            action.view_fmt.connect(self.view_fmt, type=Qt.ConnectionType.QueuedConnection)
+            cm.addAction(action)
+
+            if item.ext.upper() in EDIT_SUPPORTED:
+                action = EditAction(item, cm)
+                action.edit_fmt.connect(self.edit_fmt, type=Qt.ConnectionType.QueuedConnection)
                 cm.addAction(action)
 
-                if item.ext.upper() in EDIT_SUPPORTED:
-                    action = EditAction(item, cm)
-                    action.edit_fmt.connect(self.edit_fmt, type=Qt.ConnectionType.QueuedConnection)
-                    cm.addAction(action)
+        if item and originals:
+            cm.addSeparator()
 
-            if item and originals:
-                cm.addSeparator()
-
-            for fmt in originals:
-                action = OrigAction(fmt, cm)
-                action.restore_fmt.connect(self.restore_fmt)
-                cm.addAction(action)
-            cm.popup(event.globalPos())
-            event.accept()
+        for fmt in originals:
+            action = OrigAction(fmt, cm)
+            action.restore_fmt.connect(self.restore_fmt)
+            cm.addAction(action)
+        ac = QAction(QIcon.ic('document_open.png'), _('Open book folder'), cm)
+        ac.triggered.connect(self.open_book_folder)
+        cm.addAction(ac)
+        cm.popup(event.globalPos())
+        event.accept()
 
     def remove_format(self, fmt):
         for i in range(self.count()):
@@ -937,6 +965,7 @@ class FormatsManager(QWidget):
         self.formats.formats_dropped.connect(self.formats_dropped)
         self.formats.restore_fmt.connect(self.restore_fmt)
         self.formats.view_fmt.connect(self.show_format)
+        self.formats.open_book_folder.connect(self.open_book_folder)
         self.formats.edit_fmt.connect(self.edit_format)
         self.formats.delete_format.connect(self.remove_format)
         self.formats.itemDoubleClicked.connect(self.show_format)
@@ -993,19 +1022,17 @@ class FormatsManager(QWidget):
                 db.add_format(id_, ext, spool, notify=False,
                         index_is_id=True)
         dbfmts = db.formats(id_, index_is_id=True)
-        db_extensions = {fl.lower() for fl in (dbfmts.split(',') if dbfmts
-            else [])}
+        db_extensions = {fl.lower() for fl in (dbfmts.split(',') if dbfmts else [])}
         extensions = new_extensions.union(old_extensions)
         for ext in db_extensions:
             if ext not in extensions and ext in self.original_val:
                 db.remove_format(id_, ext, notify=False, index_is_id=True)
 
         self.changed = False
-        return
 
     def add_format(self, *args):
         files = choose_files_and_remember_all_files(
-                self, 'add formats dialog', _("Choose formats for ") + self.dialog.title.current_val,
+                self, 'add formats dialog', _('Choose formats for ') + self.dialog.title.current_val,
                 [(_('Books'), BOOK_EXTENSIONS)])
         self._add_formats(files)
 
@@ -1070,6 +1097,9 @@ class FormatsManager(QWidget):
 
     def show_format(self, item, *args):
         self.dialog.do_view_format(item.path, item.ext)
+
+    def open_book_folder(self, *a):
+        self.dialog.do_open_book_folder()
 
     def edit_format(self, item, *args):
         from calibre.gui2.widgets import BusyCursor
@@ -1170,7 +1200,7 @@ class Cover(ImageView):  # {{{
         self.select_cover_button = CB(_('&Browse'), 'document_open.png', self.select_cover)
         self.trim_cover_button = b = CB(_('Trim bord&ers'), 'trim.png')
         b.setToolTip(_(
-            'Automatically detect and remove extra space at the cover\'s edges.\n'
+            "Automatically detect and remove extra space at the cover's edges.\n"
             'Pressing it repeatedly can sometimes remove stubborn borders.'))
         b.m = m = QMenu(b)
         b.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -1195,6 +1225,27 @@ class Cover(ImageView):  # {{{
         self.frame_size = (300, 400)
         self.setSizePolicy(QSizePolicy(QSizePolicy.Policy.Preferred,
             QSizePolicy.Policy.Preferred))
+
+    def build_context_menu(self):
+        m = super().build_context_menu()
+        m.addSeparator()
+        m.addAction(QIcon.ic('view-image'), _('View image in popup window'), self.view_image)
+        return m
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            event.accept()
+            self.view_image()
+        else:
+            super().mouseDoubleClickEvent(event)
+
+    def view_image(self):
+        from calibre.gui2.image_popup import ImageView
+        d = ImageView(self, self.pixmap(), 'cover.jpg')
+        d(use_exec=True)
+        if d.transformed:
+            from calibre.utils.img import image_to_data
+            self.current_val = image_to_data(d.current_img.toImage(), fmt='png')
 
     def undo_trim(self):
         if self.cdata_before_trim:
@@ -1229,12 +1280,12 @@ class Cover(ImageView):  # {{{
                 return
             cover = None
             try:
-                with open(_file, "rb") as f:
+                with open(_file, 'rb') as f:
                     cover = f.read()
             except OSError as e:
                 d = error_dialog(
                         self, _('Error reading file'),
-                        _("<p>There was an error reading from file: <br /><b>") + _file + "</b></p><br />"+str(e))
+                        _('<p>There was an error reading from file: <br /><b>') + _file + '</b></p><br />'+str(e))
                 d.exec()
             if cover:
                 orig = self.current_val
@@ -1242,8 +1293,8 @@ class Cover(ImageView):  # {{{
                 if self.current_val is None:
                     self.current_val = orig
                     error_dialog(self,
-                        _("Not a valid picture"),
-                            _file + _(" is not a valid picture"), show=True)
+                        _('Not a valid picture'),
+                            _file + _(' is not a valid picture'), show=True)
 
     def remove_cover(self, *args):
         self.current_val = None
@@ -1252,9 +1303,7 @@ class Cover(ImageView):  # {{{
         cdata = self.current_val
         if not cdata:
             return
-        from calibre.utils.img import (
-            image_from_data, image_to_data, remove_borders_from_image,
-        )
+        from calibre.utils.img import image_from_data, image_to_data, remove_borders_from_image
         img = image_from_data(cdata)
         nimg = remove_borders_from_image(img)
         if nimg is not img:
@@ -1552,8 +1601,8 @@ class LanguagesEdit(LE, ToMetadataMixin):  # {{{
         self.update_recently_used()
 # }}}
 
-# Identifiers {{{
 
+# Identifiers {{{
 
 class Identifiers(Dialog):
 
@@ -1565,7 +1614,7 @@ class Identifiers(Dialog):
         self.l = l = QVBoxLayout(self)
 
         self.la = la = QLabel(_(
-            'Edit the book\'s identifiers. Every identifier must be on a separate line, and have the form type:value'))
+            "Edit the book's identifiers. Every identifier must be on a separate line, and have the form type:value"))
         la.setWordWrap(True)
         self.text = t = QPlainTextEdit(self)
         l.addWidget(la), l.addWidget(t)
@@ -1662,7 +1711,7 @@ class IdentifiersEdit(QLineEdit, ToMetadataMixin, LineEditIndicators):
                 if v is not None:
                     val[k] = v
         ids = sorted(iteritems(val), key=keygen)
-        txt = ', '.join(['%s:%s'%(k.lower(), vl) for k, vl in ids])
+        txt = ', '.join([f'{k.lower()}:{vl}' for k, vl in ids])
         if self.allow_undo:
             self.selectAll(), self.insert(txt.strip())
         else:
@@ -1699,7 +1748,7 @@ class IdentifiersEdit(QLineEdit, ToMetadataMixin, LineEditIndicators):
         if identifier_found:
             return
         text = str(QApplication.clipboard().text()).strip()
-        if text.startswith('http://') or text.startswith('https://'):
+        if text.startswith(('http://', 'https://')):
             return self.paste_prefix('url')
         try:
             prefix = gprefs['paste_isbn_prefixes'][0]
@@ -1745,14 +1794,14 @@ class IdentifiersEdit(QLineEdit, ToMetadataMixin, LineEditIndicators):
         rules = msprefs['id_link_rules']
         if rules:
             formatter = EvalFormatter()
-            vals = {'id' : '__ID_REGEX_PLACEHOLDER__'}
+            vals = {'id': '__ID_REGEX_PLACEHOLDER__'}
             for key in rules.keys():
                 rule = rules[key]
                 for name, template in rule:
                     try:
                         url_pattern = formatter.safe_format(template, vals, '', vals)
                         url_pattern = re.escape(url_pattern).replace('__ID_REGEX_PLACEHOLDER__', '(?P<new_id>.+)')
-                        if url_pattern.startswith('http:') or url_pattern.startswith('https:'):
+                        if url_pattern.startswith(('http:', 'https:')):
                             url_pattern = '(?:http|https):' + url_pattern.partition(':')[2]
                         new_id = re.compile(url_pattern)
                         new_id = new_id.search(text).group('new_id')
@@ -1778,9 +1827,22 @@ class IdentifiersEdit(QLineEdit, ToMetadataMixin, LineEditIndicators):
                     return True
             except Exception:
                 pass
+        for key, prefix in (
+            ('doi', 'https://dx.doi.org/'),
+            ('doi', 'https://doi.org/'),
+            ('arxiv', 'https://arxiv.org/abs/'),
+            ('oclc', 'https://www.worldcat.org/oclc/'),
+            ('issn', 'https://www.worldcat.org/issn/'),
+        ):
+            if text.startswith(prefix):
+                vals = self.current_val
+                vals[key] = text[len(prefix):].strip()
+                self.current_val = vals
+                return True
 
         return False
 # }}}
+
 
 class IndicatorLineEdit(QLineEdit, LineEditIndicators):
     pass
@@ -1824,7 +1886,7 @@ class ISBNDialog(QDialog):  # {{{
         isbn = str(txt)
         ok = None
         if not isbn:
-            pass
+            extra = ''
         elif check_isbn(isbn) is not None:
             extra = _('This ISBN is valid')
             ok = True
@@ -1915,8 +1977,8 @@ class PublisherEdit(EditWithComplete, ToMetadataMixin):  # {{{
 
 # }}}
 
-# DateEdit {{{
 
+# DateEdit {{{
 
 class DateEdit(make_undoable(DateTimeEdit), ToMetadataMixin):
 
@@ -1983,6 +2045,13 @@ class DateEdit(make_undoable(DateTimeEdit), ToMetadataMixin):
             ev.ignore()
         else:
             return super().keyPressEvent(ev)
+
+    def wheelEvent(self, ev):
+        if is_date_undefined(self.current_val):
+            self.setDateTime(QDateTime.currentDateTime())
+            ev.accept()
+        else:
+            return super().wheelEvent(ev)
 
 
 class PubdateEdit(DateEdit):

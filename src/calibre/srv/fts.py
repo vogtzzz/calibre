@@ -1,13 +1,10 @@
 #!/usr/bin/env python
-# vim:fileencoding=utf-8
 # License: GPL v3 Copyright: 2022, Kovid Goyal <kovid at kovidgoyal.net>
 
 import re
 
 from calibre.ebooks.metadata import authors_to_string
-from calibre.srv.errors import (
-    HTTPBadRequest, HTTPPreconditionRequired, HTTPUnprocessableEntity,
-)
+from calibre.srv.errors import HTTPBadRequest, HTTPPreconditionRequired, HTTPUnprocessableEntity
 from calibre.srv.routes import endpoint, json
 from calibre.srv.utils import get_library_data
 
@@ -28,7 +25,7 @@ def fts_search(ctx, rd):
     ans = {'metadata': metadata_cache, 'indexing_status': {'left': l, 'total': t}}
 
     use_stemming = rd.query.get('use_stemming', 'y') == 'y'
-    query = rd.query.get('query' '')
+    query = rd.query.get('query')
     if not query:
         raise HTTPBadRequest('No search query specified')
     qid = rd.query.get('query_id')
@@ -110,7 +107,7 @@ def fts_snippets(ctx, rd, book_ids):
         raise HTTPPreconditionRequired('Full text searching is not enabled on this library')
 
     use_stemming = rd.query.get('use_stemming', 'y') == 'y'
-    query = rd.query.get('query' '')
+    query = rd.query.get('query')
     if not query:
         raise HTTPBadRequest('No search query specified')
     try:

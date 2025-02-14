@@ -4,7 +4,10 @@
 __license__   = 'GPL v3'
 __copyright__ = '2010, Kovid Goyal <kovid at kovidgoyal.net>'
 
-import os, glob, re, functools
+import functools
+import glob
+import os
+import re
 from collections import Counter
 
 from lxml import etree
@@ -12,12 +15,12 @@ from lxml.builder import ElementMaker
 
 from calibre.constants import __appname__, __version__
 from calibre.ebooks.chardet import xml_to_unicode
-from calibre.utils.xml_parse import safe_xml_fromstring
 from calibre.utils.cleantext import clean_xml_chars
+from calibre.utils.xml_parse import safe_xml_fromstring
 from polyglot.urllib import unquote, urlparse
 
-NCX_NS = "http://www.daisy.org/z3986/2005/ncx/"
-CALIBRE_NS = "http://calibre.kovidgoyal.net/2009/metadata"
+NCX_NS = 'http://www.daisy.org/z3986/2005/ncx/'
+CALIBRE_NS = 'http://calibre.kovidgoyal.net/2009/metadata'
 NSMAP = {None: NCX_NS, 'calibre':CALIBRE_NS}
 E = ElementMaker(namespace=NCX_NS, nsmap=NSMAP)
 C = ElementMaker(namespace=CALIBRE_NS, nsmap=NSMAP)
@@ -25,8 +28,9 @@ C = ElementMaker(namespace=CALIBRE_NS, nsmap=NSMAP)
 
 def parse_html_toc(data):
     from html5_parser import parse
-    from calibre.utils.cleantext import clean_xml_chars
     from lxml import etree
+
+    from calibre.utils.cleantext import clean_xml_chars
     if isinstance(data, bytes):
         data = xml_to_unicode(data, strip_encoding_pats=True, resolve_entities=True)[0]
     root = parse(clean_xml_chars(data), maybe_xhtml=True, keep_doctype=False, sanitize_names=True)
@@ -62,7 +66,7 @@ class TOC(list):
         self.toc_thumbnail = toc_thumbnail
 
     def __str__(self):
-        lines = ['TOC: %s#%s %s'%(self.href, self.fragment, self.text)]
+        lines = [f'TOC: {self.href}#{self.fragment} {self.text}']
         for child in self:
             c = str(child).splitlines()
             for l in c:
@@ -243,8 +247,7 @@ class TOC(list):
                 E.head(
                     E.meta(name='dtb:uid', content=str(uid)),
                     E.meta(name='dtb:depth', content=str(self.depth())),
-                    E.meta(name='dtb:generator', content='%s (%s)'%(__appname__,
-                        __version__)),
+                    E.meta(name='dtb:generator', content=f'{__appname__} ({__version__})'),
                     E.meta(name='dtb:totalPageCount', content='0'),
                     E.meta(name='dtb:maxPageNumber', content='0'),
                 ),
@@ -260,7 +263,7 @@ class TOC(list):
             if not text:
                 text = ''
             c[1] += 1
-            item_id = 'num_%d'%c[1]
+            item_id = f'num_{c[1]}'
             text = clean_xml_chars(text)
             elem = E.navPoint(
                     E.navLabel(E.text(re.sub(r'\s+', ' ', text))),

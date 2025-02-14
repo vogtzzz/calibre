@@ -5,10 +5,10 @@ __license__   = 'GPL v3'
 __copyright__ = '2012, Kovid Goyal <kovid at kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-from struct import unpack_from, calcsize, pack, error as struct_error
+from struct import calcsize, pack, unpack_from
+from struct import error as struct_error
 
-from calibre.utils.fonts.sfnt import (UnknownTable, FixedProperty,
-        max_power_of_two)
+from calibre.utils.fonts.sfnt import FixedProperty, UnknownTable, max_power_of_two
 from calibre.utils.fonts.sfnt.errors import UnsupportedFont
 
 
@@ -25,7 +25,7 @@ class KernTable(UnknownTable):
 
     def restrict_to_glyphs(self, glyph_ids):
         if self._version not in {0, 0x10000}:
-            raise UnsupportedFont('kern table has version: %x'%self._version)
+            raise UnsupportedFont(f'kern table has version: {self._version:x}')
         offset = 4 if (self._version == 0) else 8
         tables = []
         for i in range(self.num_tables):

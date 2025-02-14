@@ -8,10 +8,7 @@ from contextlib import contextmanager
 from optparse import OptionGroup, OptionValueError
 
 from calibre import prints
-from calibre.db.adding import (
-    cdb_find_in_dir, cdb_recursive_find, compile_rule, create_format_map,
-    run_import_plugins, run_import_plugins_before_metadata
-)
+from calibre.db.adding import cdb_find_in_dir, cdb_recursive_find, compile_rule, create_format_map, run_import_plugins, run_import_plugins_before_metadata
 from calibre.db.utils import find_identical_books
 from calibre.ebooks.metadata import MetaInformation, string_to_authors
 from calibre.ebooks.metadata.book.serialize import read_cover, serialize_cover
@@ -157,7 +154,7 @@ def format_group(db, notify_changes, is_remote, args):
         if is_remote:
             paths = []
             for name, data in formats:
-                with open(os.path.join(tdir, os.path.basename(name)), 'wb') as f:
+                with open(os.path.join(tdir, os.path.basename(name.replace('\\', os.sep))), 'wb') as f:
                     f.write(data)
                 paths.append(f.name)
         else:
@@ -166,7 +163,7 @@ def format_group(db, notify_changes, is_remote, args):
         mi = metadata_from_formats(paths)
         if mi.title is None:
             return None, set(), set(), False
-        if cover_data and not mi.cover_data or not mi.cover_data[1]:
+        if cover_data and (not mi.cover_data or not mi.cover_data[1]):
             mi.cover_data = 'jpeg', cover_data
         format_map = create_format_map(paths)
         added_ids, updated_ids, duplicates = do_adding(
@@ -403,7 +400,7 @@ the folder related options below.
         try:
             getattr(parser.values, option.dest).append(compile_rule(rule))
         except Exception:
-            raise OptionValueError('%r is not a valid filename pattern' % value)
+            raise OptionValueError(f'{value!r} is not a valid filename pattern')
 
     g.add_option(
         '-1',

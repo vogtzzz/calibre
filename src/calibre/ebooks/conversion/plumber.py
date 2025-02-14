@@ -2,21 +2,31 @@ __license__ = 'GPL 3'
 __copyright__ = '2009, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import os, re, sys, shutil, pprint, json
+import json
+import os
+import pprint
+import re
+import shutil
+import sys
 from functools import partial
 
-from calibre.customize.conversion import OptionRecommendation, DummyReporter
-from calibre.customize.ui import input_profiles, output_profiles, \
-        plugin_for_input_format, plugin_for_output_format, \
-        available_input_formats, available_output_formats, \
-        run_plugins_on_preprocess, run_plugins_on_postprocess
+from calibre import extract, filesystem_encoding, get_types_map, isbytestring, walk
+from calibre.constants import __version__
+from calibre.customize.conversion import DummyReporter, OptionRecommendation
+from calibre.customize.ui import (
+    available_input_formats,
+    available_output_formats,
+    input_profiles,
+    output_profiles,
+    plugin_for_input_format,
+    plugin_for_output_format,
+    run_plugins_on_postprocess,
+    run_plugins_on_preprocess,
+)
 from calibre.ebooks.conversion.preprocess import HTMLPreProcessor
 from calibre.ptempfile import PersistentTemporaryDirectory
 from calibre.utils.date import parse_date
 from calibre.utils.zipfile import ZipFile
-from calibre import (extract, walk, isbytestring, filesystem_encoding,
-        get_types_map)
-from calibre.constants import __version__
 from polyglot.builtins import string_or_bytes
 
 DEBUG_README=b'''
@@ -68,7 +78,6 @@ ARCHIVE_FMTS = ('zip', 'rar', 'oebzip')
 
 
 class Plumber:
-
     '''
     The `Plumber` manages the conversion pipeline. An UI should call the methods
     :method:`merge_ui_recommendations` and then :method:`run`. The plumber will
@@ -177,7 +186,7 @@ OptionRecommendation(name='disable_font_rescaling',
 OptionRecommendation(name='minimum_line_height',
             recommended_value=120.0, level=OptionRecommendation.LOW,
             help=_(
-            'The minimum line height, as a percentage of the element\'s '
+            "The minimum line height, as a percentage of the element's "
             'calculated font size. calibre will ensure that every element '
             'has a line height of at least this setting, irrespective of '
             'what the input document specifies. Set to zero to disable. '
@@ -410,6 +419,11 @@ OptionRecommendation(name='remove_fake_margins',
                 'case you can disable the removal.')
         ),
 
+OptionRecommendation(name='add_alt_text_to_img',
+    recommended_value=False, level=OptionRecommendation.LOW,
+    help=_('When an <img> tag has no alt attribute, check the associated image file for metadata that specifies alternate text, and'
+            ' use it to fill in the alt attribute. The alt attribute is used by screen readers for assisting the visually challenged.')
+),
 
 OptionRecommendation(name='margin_top',
         recommended_value=5.0, level=OptionRecommendation.LOW,
@@ -545,13 +559,15 @@ OptionRecommendation(name='asciiize',
 OptionRecommendation(name='keep_ligatures',
             recommended_value=False, level=OptionRecommendation.LOW,
             help=_('Preserve ligatures present in the input document. '
-                'A ligature is a special rendering of a pair of '
+                'A ligature is a combined character of a pair of '
                 'characters like ff, fi, fl et cetera. '
                 'Most readers do not have support for '
                 'ligatures in their default fonts, so they are '
                 'unlikely to render correctly. By default, calibre '
                 'will turn a ligature into the corresponding pair of normal '
-                'characters. This option will preserve them instead.')
+                'characters. Note that ligatures here mean only unicode ligatures '
+                'not ligatures created via CSS or font styles. '
+                'This option will preserve them instead.')
         ),
 
 OptionRecommendation(name='title',
@@ -923,11 +939,13 @@ OptionRecommendation(name='search_replace',
                 setattr(mi, x, val)
 
     def download_cover(self, url):
-        from calibre import browser
-        from PIL import Image
         import io
+
+        from PIL import Image
+
+        from calibre import browser
         from calibre.ptempfile import PersistentTemporaryFile
-        self.log('Downloading cover from %r'%url)
+        self.log(f'Downloading cover from {url!r}')
         br = browser()
         raw = br.open_novisit(url).read()
         buf = io.BytesIO(raw)
@@ -981,7 +999,7 @@ OptionRecommendation(name='search_replace',
                     setattr(self.opts, attr, x)
                     return
             self.log.warn(
-                'Profile (%s) %r is no longer available, using default'%(which, sval))
+                f'Profile ({which}) {sval!r} is no longer available, using default')
             for x in profiles():
                 if x.short_name == 'default':
                     setattr(self.opts, attr, x)
@@ -999,7 +1017,7 @@ OptionRecommendation(name='search_replace',
             self.log('Conversion options changed from defaults:')
             for rec in self.changed_options:
                 if rec.option.name not in ('username', 'password'):
-                    self.log(' ', '%s:' % rec.option.name, repr(rec.recommended_value))
+                    self.log(' ', f'{rec.option.name}:', repr(rec.recommended_value))
         if self.opts.verbose > 1:
             self.log.debug('Resolved conversion options')
             try:
@@ -1054,8 +1072,10 @@ OptionRecommendation(name='search_replace',
         self.flush()
         if self.opts.embed_all_fonts or self.opts.embed_font_family:
             # Start the threaded font scanner now, for performance
-            from calibre.utils.fonts.scanner import font_scanner  # noqa
-        import css_parser, logging
+            from calibre.utils.fonts.scanner import font_scanner  # noqa: F401
+        import logging
+
+        import css_parser
         css_parser.log.setLevel(logging.WARN)
         get_types_map()  # Ensure the mimetypes module is initialized
 
@@ -1184,11 +1204,17 @@ OptionRecommendation(name='search_replace',
             try:
                 fkey = list(map(float, fkey.split(',')))
             except Exception:
-                self.log.error('Invalid font size key: %r ignoring'%fkey)
+                self.log.error(f'Invalid font size key: {fkey!r} ignoring')
                 fkey = self.opts.dest.fkey
 
         from calibre.ebooks.oeb.transforms.jacket import Jacket
         Jacket()(self.oeb, self.opts, self.user_metadata)
+        pr(0.37)
+        self.flush()
+
+        if self.opts.add_alt_text_to_img:
+            from calibre.ebooks.oeb.transforms.alt_text import AddAltText
+            AddAltText()(self.oeb, self.opts)
         pr(0.4)
         self.flush()
 
@@ -1242,8 +1268,7 @@ OptionRecommendation(name='search_replace',
         self.opts.insert_blank_line = oibl
         self.opts.remove_paragraph_spacing = orps
 
-        from calibre.ebooks.oeb.transforms.page_margin import \
-            RemoveFakeMargins, RemoveAdobeMargins
+        from calibre.ebooks.oeb.transforms.page_margin import RemoveAdobeMargins, RemoveFakeMargins
         RemoveFakeMargins()(self.oeb, self.log, self.opts)
         RemoveAdobeMargins()(self.oeb, self.log, self.opts)
 
@@ -1273,7 +1298,7 @@ OptionRecommendation(name='search_replace',
             self.dump_oeb(self.oeb, out_dir)
             self.log('Processed HTML written to:', out_dir)
 
-        self.log.info('Creating %s...'%self.output_plugin.name)
+        self.log.info(f'Creating {self.output_plugin.name}...')
         our = CompositeProgressReporter(0.67, 1., self.ui_reporter)
         self.output_plugin.report_progress = our
         our(0., _('Running %s plugin')%self.output_plugin.name)

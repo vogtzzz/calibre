@@ -333,7 +333,7 @@ class Worker(Thread):  # Get details {{{
         self.publisher_names = {'Publisher', 'Uitgever', 'Verlag', 'Utgivare', 'Herausgeber',
                                 'Editore', 'Editeur', 'Éditeur', 'Editor', 'Editora', '出版社'}
 
-        self.language_xpath =    '''
+        self.language_xpath = '''
             descendant::*[
                 starts-with(text(), "Language:") \
                 or text() = "Language" \
@@ -365,7 +365,7 @@ class Worker(Thread):  # Get details {{{
             r'([0-9.,]+) ?(out of|von|van|su|étoiles sur|つ星のうち|de un máximo de|de|av) '
             r'([\d\.]+)( (stars|Sternen|stelle|estrellas|estrelas|sterren|stjärnor)){0,1}'
         )
-        self.ratings_pat_cn = re.compile('([0-9.]+) 颗星，最多 5 颗星')
+        self.ratings_pat_cn = re.compile(r'([0-9.]+) 颗星，最多 5 颗星')
         self.ratings_pat_jp = re.compile(r'\d+つ星のうち([\d\.]+)')
 
         lm = {
@@ -497,6 +497,7 @@ class Worker(Thread):  # Get details {{{
         non_hero = tuple(self.selector(
             'div#bookDetails_container_div div#nonHeroSection')) or tuple(self.selector(
                 '#productDetails_techSpec_sections'))
+        feature_and_detail_bullets = root.xpath('//*[@data-feature-name="featureBulletsAndDetailBullets"]')
         if detail_bullets:
             self.parse_detail_bullets(root, mi, detail_bullets[0])
         elif non_hero:
@@ -505,6 +506,8 @@ class Worker(Thread):  # Get details {{{
             except:
                 self.log.exception(
                     'Failed to parse new-style book details section')
+        elif feature_and_detail_bullets:
+            self.parse_detail_bullets(root, mi, feature_and_detail_bullets[0], ul_selector='ul')
 
         else:
             pd = root.xpath(self.pd_xpath)
@@ -561,11 +564,11 @@ class Worker(Thread):  # Get details {{{
         res = self.tostring(elem, encoding='unicode', method='text')
         if only_printable:
             try:
-                filtered_characters = list(s for s in res if s.isprintable())
+                filtered_characters = [s for s in res if s.isprintable()]
             except AttributeError:
-                filtered_characters = list(s for s in res if s in string.printable)
-            res = ''.join(filtered_characters).strip()
-        return res
+                filtered_characters = [s for s in res if s in string.printable]
+            res = ''.join(filtered_characters)
+        return res.strip()
 
     def parse_title(self, root):
 
@@ -581,6 +584,10 @@ class Worker(Thread):  # Get details {{{
             for child in h1.xpath('./*[contains(@class, "a-color-secondary")]'):
                 h1.remove(child)
             return sanitize_title(self.totext(h1))
+        # audiobooks
+        elem = root.xpath('//*[@id="productTitle"]')
+        if elem:
+            return sanitize_title(self.totext(elem[0]))
         tdiv = root.xpath('//h1[contains(@class, "parseasinTitle")]')
         if not tdiv:
             span = root.xpath('//*[@id="ebooksTitle"]')
@@ -674,6 +681,16 @@ class Worker(Thread):  # Get details {{{
                 ans = parse_ratings_text(t)
                 if ans is not None:
                     return ans
+        else:
+            # found in kindle book pages on amazon.com
+            for x in root.xpath('//a[@id="acrCustomerReviewLink"]'):
+                spans = x.xpath('./span')
+                if spans:
+                    txt = self.tostring(spans[0], method='text', encoding='unicode', with_tail=False).strip()
+                    try:
+                        return float(txt.replace(',', '.'))
+                    except Exception:
+                        pass
 
     def _render_comments(self, desc):
         from calibre.library.comments import sanitize_comments_html
@@ -707,8 +724,8 @@ class Worker(Thread):  # Get details {{{
         # remove all attributes from tags
         desc = re.sub(r'<([a-zA-Z0-9]+)\s[^>]+>', r'<\1>', desc)
         # Collapse whitespace
-        # desc = re.sub('\n+', '\n', desc)
-        # desc = re.sub(' +', ' ', desc)
+        # desc = re.sub(r'\n+', '\n', desc)
+        # desc = re.sub(r' +', ' ', desc)
         # Remove the notice about text referring to out of print editions
         desc = re.sub(r'(?s)<em>--This text ref.*?</em>', '', desc)
         # Remove comments
@@ -721,12 +738,14 @@ class Worker(Thread):  # Get details {{{
         except ImportError:
             from urllib import unquote
         ans = ''
-        ovr = tuple(self.selector('#drengr_MobileTabbedDescriptionOverviewContent_feature_div'))
+        ovr = tuple(self.selector('#drengr_MobileTabbedDescriptionOverviewContent_feature_div')) or tuple(
+            self.selector('#drengr_DesktopTabbedDescriptionOverviewContent_feature_div'))
         if ovr:
             ovr = ovr[0]
             ovr.tag = 'div'
             ans = self._render_comments(ovr)
-            ovr = tuple(self.selector('#drengr_MobileTabbedDescriptionEditorialsContent_feature_div'))
+            ovr = tuple(self.selector('#drengr_MobileTabbedDescriptionEditorialsContent_feature_div')) or tuple(
+                self.selector('#drengr_DesktopTabbedDescriptionEditorialsContent_feature_div'))
             if ovr:
                 ovr = ovr[0]
                 ovr.tag = 'div'
@@ -752,7 +771,11 @@ class Worker(Thread):  # Get details {{{
                     ns = tuple(self.selector('#bookDescription_feature_div .a-expander-content'))
                     if ns:
                         ans = self._render_comments(ns[0])
-
+        # audiobooks
+        if not ans:
+            elem = root.xpath('//*[@id="audible_desktopTabbedDescriptionOverviewContent_feature_div"]')
+            if elem:
+                ans = self._render_comments(elem[0])
         desc = root.xpath(
             '//div[@id="productDescription"]/*[@class="content"]')
         if desc:
@@ -781,6 +804,20 @@ class Worker(Thread):  # Get details {{{
 
     def parse_series(self, root):
         ans = (None, None)
+
+        # This is found on kindle pages for books on amazon.com
+        series = root.xpath('//*[@id="rpi-attribute-book_details-series"]')
+        if series:
+            spans = series[0].xpath('descendant::span')
+            if spans:
+                texts = [self.tostring(x, encoding='unicode', method='text', with_tail=False).strip() for x in spans]
+                texts = list(filter(None, texts))
+                if len(texts) == 2:
+                    idxinfo, series = texts
+                    m = re.search(r'[0-9.]+', idxinfo.strip())
+                    if m is not None:
+                        ans = series, float(m.group())
+                        return ans
 
         # This is found on the paperback/hardback pages for books on amazon.com
         series = root.xpath('//div[@data-feature-name="seriesTitle"]')
@@ -873,11 +910,16 @@ class Worker(Thread):  # Get details {{{
                         seen.add(lraw)
         return ans
 
-    def parse_cover(self, root, raw=b""):
+    def parse_cover(self, root, raw=b''):
         # Look for the image URL in javascript, using the first image in the
         # image gallery as the cover
         import json
-        imgpat = re.compile(r"""'imageGalleryData'\s*:\s*(\[\s*{.+])""")
+        imgpat = re.compile(r'"hiRes":"(.+?)","thumb"')
+        for script in root.xpath('//script'):
+            m = imgpat.search(script.text or '')
+            if m is not None:
+                return m.group(1)
+        imgpat = re.compile(r''''imageGalleryData'\s*:\s*(\[\s*{.+])''')
         for script in root.xpath('//script'):
             m = imgpat.search(script.text or '')
             if m is not None:
@@ -926,6 +968,7 @@ class Worker(Thread):  # Get details {{{
                             if width > mwidth:
                                 mwidth = width
                                 url = iurl
+
                         return url
                     except Exception:
                         pass
@@ -944,8 +987,11 @@ class Worker(Thread):  # Get details {{{
                 if url:
                     return url
 
-    def parse_detail_bullets(self, root, mi, container):
-        ul = next(self.selector('.detail-bullet-list', root=container))
+    def parse_detail_bullets(self, root, mi, container, ul_selector='.detail-bullet-list'):
+        try:
+            ul = next(self.selector(ul_selector, root=container))
+        except StopIteration:
+            return
         for span in self.selector('.a-list-item', root=ul):
             cells = span.xpath('./span')
             if len(cells) >= 2:
@@ -960,7 +1006,7 @@ class Worker(Thread):  # Get details {{{
 
     def parse_detail_cells(self, mi, c1, c2):
         name = self.totext(c1, only_printable=True).strip().strip(':').strip()
-        val = self.totext(c2).strip()
+        val = self.totext(c2)
         val = val.replace('\u200e', '').replace('\u200f', '')
         if not val:
             return
@@ -1044,7 +1090,7 @@ class Worker(Thread):  # Get details {{{
 class Amazon(Source):
 
     name = 'Amazon.com'
-    version = (1, 3, 5)
+    version = (1, 3, 12)
     minimum_calibre_version = (2, 82, 0)
     description = _('Downloads metadata and covers from Amazon')
 
@@ -1085,7 +1131,7 @@ class Amazon(Source):
     options = (
         Option('domain', 'choices', 'com', _('Amazon country website to use:'),
                _('Metadata from Amazon will be fetched using this '
-                 'country\'s Amazon website.'), choices=AMAZON_DOMAINS),
+                 "country's Amazon website."), choices=AMAZON_DOMAINS),
         Option('server', 'choices', 'auto', _('Server to get data from:'),
                _(
                    'Amazon has started blocking attempts to download'
@@ -1173,7 +1219,7 @@ class Amazon(Source):
         self.set_amazon_id_touched_fields()
 
     def set_amazon_id_touched_fields(self):
-        ident_name = "identifier:amazon"
+        ident_name = 'identifier:amazon'
         if self.domain != 'com':
             ident_name += '_' + self.domain
         tf = [x for x in self.touched_fields if not
@@ -1202,6 +1248,7 @@ class Amazon(Source):
             'au':  'https://www.amazon.com.au/',
             'br':  'https://www.amazon.com.br/',
             'jp':  'https://www.amazon.co.jp/',
+            'mx':  'https://www.amazon.com.mx/',
         }.get(domain, 'https://www.amazon.%s/' % domain)
 
     def _get_book_url(self, identifiers):  # {{{
@@ -1297,7 +1344,7 @@ class Amazon(Source):
         terms = []
         q = {'search-alias': 'aps',
              'unfiltered': '1',
-             }
+        }
 
         if domain == 'com':
             q['sort'] = 'relevanceexprank'
@@ -1348,8 +1395,7 @@ class Amazon(Source):
                 q['field-keywords'] += ' ' + q.pop(f, '')
             q['field-keywords'] = q['field-keywords'].strip()
 
-        encoded_q = dict([(x.encode('utf-8', 'ignore'), y.encode(
-            'utf-8', 'ignore')) for x, y in q.items()])
+        encoded_q = {x.encode('utf-8', 'ignore'): y.encode('utf-8', 'ignore') for x, y in q.items()}
         url_query = urlencode(encoded_q)
         # amazon's servers want IRIs with unicode characters not percent esaped
         parts = []
@@ -1396,9 +1442,10 @@ class Amazon(Source):
             return True
 
         for query in (
-                '//div[contains(@class, "s-result-list")]//h2/a[@href]',
-                '//div[contains(@class, "s-result-list")]//div[@data-index]//h5//a[@href]',
-                r'//li[starts-with(@id, "result_")]//a[@href and contains(@class, "s-access-detail-page")]',
+            '//div[contains(@class, "s-result-list")]//h2/a[@href]',
+            '//div[contains(@class, "s-result-list")]//div[@data-index]//h5//a[@href]',
+            r'//li[starts-with(@id, "result_")]//a[@href and contains(@class, "s-access-detail-page")]',
+            '//div[@data-cy="title-recipe"]/a[@href]',
         ):
             result_links = root.xpath(query)
             if result_links:
@@ -1459,6 +1506,7 @@ class Amazon(Source):
         matches = []
         query, domain = self.create_query(log, title=title, authors=authors,
                                           identifiers=identifiers)
+        time.sleep(1)
         try:
             raw = br.open_novisit(query, timeout=timeout).read().strip()
         except Exception as e:
@@ -1511,13 +1559,17 @@ class Amazon(Source):
             domain)[len('https://'):].partition('/')[0]
         matches = []
         server = override_server or self.server
-        urlproc, sfunc = se.google_url_processor, se.google_search
         if server == 'bing':
             urlproc, sfunc = se.bing_url_processor, se.bing_search
         elif server == 'wayback':
             urlproc, sfunc = se.wayback_url_processor, se.ddg_search
         elif server == 'ddg':
             urlproc, sfunc = se.ddg_url_processor, se.ddg_search
+        elif server == 'google':
+            urlproc, sfunc = se.google_url_processor, se.google_search
+        else:  # auto or unknown
+            # urlproc, sfunc = se.google_url_processor, se.google_search
+            urlproc, sfunc = se.bing_url_processor, se.bing_search
         try:
             results, qurl = sfunc(terms, site, log=log, br=br, timeout=timeout)
         except HTTPError as err:
@@ -1535,12 +1587,10 @@ class Amazon(Source):
 
             purl = urlparse(result.url)
             if '/dp/' in purl.path and site in purl.netloc:
-                url = result.cached_url
-                if url is None:
-                    url = se.get_cached_url(result.url, br, timeout=timeout)
-                if url is None:
-                    log('Failed to find cached page for:', result.url)
-                    continue
+                # We cannot use cached URL as wayback machine no longer caches
+                # amazon and Google and Bing web caches are no longer
+                # accessible.
+                url = result.url
                 if url not in matches:
                     matches.append(url)
                 if len(matches) >= 3:
@@ -1644,13 +1694,20 @@ class Amazon(Source):
         if not self.use_search_engine:
             return True
         if title is not None:
+            import regex
+            only_punctuation_pat = regex.compile(r'^\p{P}+$')
 
             def tokenize_title(x):
-                return icu_lower(x).replace("'", '').replace('"', '').rstrip(':')
+                ans = icu_lower(x).replace("'", '').replace('"', '').rstrip(':')
+                if only_punctuation_pat.match(ans) is not None:
+                    ans = ''
+                return ans
 
             tokens = {tokenize_title(x) for x in title.split() if len(x) > 3}
+            tokens.discard('')
             if tokens:
                 result_tokens = {tokenize_title(x) for x in mi.title.split()}
+                result_tokens.discard('')
                 if not tokens.intersection(result_tokens):
                     log('Ignoring result:', mi.title, 'as its title does not match')
                     return False
@@ -1715,16 +1772,20 @@ class Amazon(Source):
 def manual_tests(domain, **kw):  # {{{
     # To run these test use:
     # calibre-debug -c "from calibre.ebooks.metadata.sources.amazon import *; manual_tests('com')"
-    from calibre.ebooks.metadata.sources.test import (
-        authors_test, comments_test, isbn_test, series_test, test_identify_plugin,
-        title_test,
-    )
+    from calibre.ebooks.metadata.sources.test import authors_test, comments_test, isbn_test, series_test, test_identify_plugin, title_test
     all_tests = {}
     all_tests['com'] = [  # {{{
+        (  # in title
+            {'title': 'Expert C# 2008 Business Objects',
+             'authors': ['Lhotka']},
+            [title_test('Expert C#'),
+             authors_test(['Rockford Lhotka'])
+             ]
+        ),
+
         (   # Paperback with series
             {'identifiers': {'amazon': '1423146786'}},
-            [title_test('The Heroes of Olympus, Book Five The Blood of Olympus',
-                        exact=True), series_test('The Heroes of Olympus', 5)]
+            [title_test('Heroes of Olympus', exact=False), series_test('The Heroes of Olympus', 5)]
         ),
 
         (   # Kindle edition with series
@@ -1743,24 +1804,21 @@ def manual_tests(domain, **kw):  # {{{
         (  # Different comments markup, using Book Description section
             {'identifiers': {'amazon': '0982514506'}},
             [title_test(
-                "Griffin's Destiny: Book Three: The Griffin's Daughter Trilogy",
+                "Griffin's Destiny",
                 exact=True),
              comments_test('Jelena'), comments_test('Ashinji'),
              ]
         ),
 
-        (  # # in title
-            {'title': 'Expert C# 2008 Business Objects',
-             'authors': ['Lhotka']},
-            [title_test('Expert C#'),
-             authors_test(['Rockford Lhotka'])
-             ]
+        (   # New search results page markup (Dec 2024)
+            {'title': 'Come si scrive un articolo medico-scientifico'},
+            [title_test('Come si scrive un articolo medico-scientifico', exact=True)]
         ),
 
         (  # No specific problems
             {'identifiers': {'isbn': '0743273567'}},
-            [title_test('the great gatsby: the only authorized edition', exact=True),
-             authors_test(['Francis Scott Fitzgerald'])]
+            [title_test('the great gatsby'),
+             authors_test(['f. Scott Fitzgerald'])]
         ),
 
     ]
@@ -1821,7 +1879,7 @@ def manual_tests(domain, **kw):  # {{{
         ),
         (
             {'identifiers': {'isbn': '2221116798'}},
-            [title_test('L\'étrange voyage de Monsieur Daldry',
+            [title_test("L'étrange voyage de Monsieur Daldry",
                         exact=True), authors_test(['Marc Levy'])
              ]
 
@@ -1912,7 +1970,7 @@ def manual_tests(domain, **kw):  # {{{
             [title_test('Parting Shot', exact=True),
              authors_test(['Mary Calmes'])]
         ),
-        (  # # in title
+        (  # in title
             {'title': 'Expert C# 2008 Business Objects',
              'authors': ['Lhotka']},
             [title_test('Expert C# 2008 Business Objects'),

@@ -13,9 +13,7 @@ from io import BytesIO
 
 from calibre.ebooks.mobi.mobiml import MBP_NS
 from calibre.ebooks.mobi.utils import is_guide_ref_start
-from calibre.ebooks.oeb.base import (
-    OEB_DOCS, XHTML, XHTML_NS, XML_NS, namespace, prefixname, urlnormalize
-)
+from calibre.ebooks.oeb.base import OEB_DOCS, XHTML, XHTML_NS, XML_NS, namespace, prefixname, urlnormalize
 from polyglot.builtins import string_or_bytes
 from polyglot.urllib import urldefrag
 
@@ -165,7 +163,7 @@ class Serializer:
                 continue
 
             buf.write(b'<reference type="')
-            if ref.type.startswith('other.') :
+            if ref.type.startswith('other.'):
                 self.serialize_text(ref.type.replace('other.',''), quot=True)
             else:
                 self.serialize_text(ref.type, quot=True)
@@ -225,7 +223,7 @@ class Serializer:
                 buf.write(b'<mbp:pagebreak />')
                 self.id_offsets[urlnormalize(href)] = buf.tell()
 
-            if tocref.klass == "periodical":
+            if tocref.klass == 'periodical':
                 buf.write(b'<div> <div height="1em"></div>')
             else:
                 t = tocref.title
@@ -358,13 +356,13 @@ class Serializer:
                 if child.tail:
                     self.anchor_offset = None
                     self.serialize_text(child.tail)
-        buf.write(('</%s>' % tag).encode('utf-8'))
+        buf.write((f'</{tag}>').encode('utf-8'))
 
     def serialize_text(self, text, quot=False):
         text = text.replace('&', '&amp;')
         text = text.replace('<', '&lt;')
         text = text.replace('>', '&gt;')
-        text = text.replace('\u00AD', '')  # Soft-hyphen
+        text = text.replace('\u00ad', '')  # Soft-hyphen
         if quot:
             text = text.replace('"', '&quot;')
         if isinstance(text, str):
@@ -383,7 +381,7 @@ class Serializer:
             is_start = (href and href == start_href)
             # Iterate over all filepos items
             if href not in id_offsets:
-                self.logger.warn('Hyperlink target %r not found' % href)
+                self.logger.warn(f'Hyperlink target {href!r} not found')
                 # Link to the top of the document, better than just ignoring
                 href, _ = urldefrag(href)
             if href in self.id_offsets:
@@ -392,4 +390,4 @@ class Serializer:
                     self.start_offset = ioff
                 for hoff in hoffs:
                     buf.seek(hoff)
-                    buf.write(('%010d' % ioff).encode('utf-8'))
+                    buf.write(f'{ioff:010}'.encode('utf-8'))

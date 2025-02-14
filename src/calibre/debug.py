@@ -7,11 +7,14 @@ __copyright__ = '2008, Kovid Goyal <kovid at kovidgoyal.net>'
 Embedded console for debugging.
 '''
 
-import sys, os, functools
-from calibre.utils.config import OptionParser
-from calibre.constants import iswindows
+import functools
+import os
+import sys
+
 from calibre import prints
+from calibre.constants import iswindows
 from calibre.startup import get_debug_executable
+from calibre.utils.config import OptionParser
 from polyglot.builtins import exec_path
 
 
@@ -53,15 +56,15 @@ as a shebang in scripts, like this:
                       help=_('Subset the specified font. Use -- after this option to pass option to the font subsetting program.'))
     parser.add_option('-d', '--debug-device-driver', default=False, action='store_true',
                       help=_('Debug device detection'))
-    parser.add_option('-g', '--gui',  default=False, action='store_true',
+    parser.add_option('-g', '--gui', default=False, action='store_true',
                       help=_('Run the GUI with debugging enabled. Debug output is '
                       'printed to stdout and stderr.'))
-    parser.add_option('--gui-debug',  default=None,
+    parser.add_option('--gui-debug', default=None,
                       help=_('Run the GUI with a debug console, logging to the'
                       ' specified path. For internal use only, use the -g'
                       ' option to run the GUI in debug mode'))
-    parser.add_option('--run-without-debug', default=False, action='store_true', help=_('Don\'t run with the DEBUG flag set'))
-    parser.add_option('-w', '--viewer',  default=False, action='store_true',
+    parser.add_option('--run-without-debug', default=False, action='store_true', help=_("Don't run with the DEBUG flag set"))
+    parser.add_option('-w', '--viewer', default=False, action='store_true',
                       help=_('Run the E-book viewer in debug mode'))
     parser.add_option('--paths', default=False, action='store_true',
             help=_('Output the paths necessary to setup the calibre environment'))
@@ -132,7 +135,9 @@ def debug_device_driver():
 
 
 def add_simple_plugin(path_to_plugin):
-    import tempfile, zipfile, shutil
+    import shutil
+    import tempfile
+    import zipfile
     tdir = tempfile.mkdtemp()
     open(os.path.join(tdir, 'custom_plugin.py'),
             'wb').write(open(path_to_plugin, 'rb').read())
@@ -152,8 +157,8 @@ def print_basic_debug_info(out=None):
         out = sys.stdout
     out = functools.partial(prints, file=out)
     import platform
-    from calibre.constants import (__appname__, get_version, isportable, ismacos,
-                                   isfrozen)
+
+    from calibre.constants import __appname__, get_version, isfrozen, ismacos, isportable
     from calibre.utils.localization import set_translators
     out(__appname__, get_version(), 'Portable' if isportable else '',
         'embedded-python:', isfrozen)
@@ -171,6 +176,7 @@ def print_basic_debug_info(out=None):
     except:
         pass
     out('Interface language:', str(set_translators.lang))
+    out('EXE path:', sys.executable)
     from calibre.customize.ui import has_external_plugins, initialized_plugins
     if has_external_plugins():
         from calibre.customize import PluginInstallationType
@@ -315,7 +321,7 @@ def main(args=sys.argv):
             elif ext in {'mobi', 'azw', 'azw3'}:
                 inspect_mobi(path)
             else:
-                print('Cannot dump unknown filetype: %s' % path)
+                print(f'Cannot dump unknown filetype: {path}')
     elif len(args) >= 2 and os.path.exists(os.path.join(args[1], '__main__.py')):
         sys.path.insert(0, args[1])
         run_script(os.path.join(args[1], '__main__.py'), args[2:])

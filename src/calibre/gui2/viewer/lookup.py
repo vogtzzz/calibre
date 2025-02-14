@@ -5,24 +5,43 @@
 import sys
 import textwrap
 from functools import lru_cache
+
 from qt.core import (
-    QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-    QFormLayout, QHBoxLayout, QIcon, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QPalette, QPushButton, QSize, Qt, QTimer, QUrl, QVBoxLayout, QWidget, pyqtSignal,
+    QAbstractItemView,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDateTime,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QNetworkCookie,
+    QPalette,
+    QPushButton,
+    QSize,
+    Qt,
+    QTimer,
+    QUrl,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
 )
-from qt.webengine import (
-    QWebEnginePage, QWebEngineProfile, QWebEngineScript, QWebEngineView,
-)
+from qt.webengine import QWebEnginePage, QWebEngineProfile, QWebEngineScript, QWebEngineView
 
 from calibre import prints, random_user_agent
+from calibre.ebooks.metadata.sources.search_engines import google_consent_cookies
 from calibre.gui2 import error_dialog
 from calibre.gui2.viewer.web_view import apply_font_settings, vprefs
 from calibre.gui2.widgets2 import Dialog
 from calibre.utils.localization import _, canonicalize_lang, get_lang, lang_as_iso639_1
 from calibre.utils.resources import get_path as P
-from calibre.utils.webengine import (
-    create_script, insert_scripts, secure_webengine, setup_profile,
-)
+from calibre.utils.webengine import create_script, insert_scripts, secure_webengine, setup_profile
 
 
 @lru_cache
@@ -226,6 +245,17 @@ def create_profile():
         insert_scripts(ans, create_script('lookup.js', js, injection_point=QWebEngineScript.InjectionPoint.DocumentCreation))
         s = ans.settings()
         s.setDefaultTextEncoding('utf-8')
+        cs = ans.cookieStore()
+        for c in google_consent_cookies():
+            cookie = QNetworkCookie()
+            cookie.setName(c['name'].encode())
+            cookie.setValue(c['value'].encode())
+            cookie.setDomain(c['domain'])
+            cookie.setPath(c['path'])
+            cookie.setSecure(False)
+            cookie.setHttpOnly(False)
+            cookie.setExpirationDate(QDateTime())
+            cs.setCookie(cookie)
         create_profile.ans = ans
     return ans
 
@@ -242,13 +272,24 @@ class Page(QWebEnginePage):
             sys.stderr.flush()
 
     def zoom_in(self):
-        self.setZoomFactor(min(self.zoomFactor() + 0.2, 5))
+        factor = min(self.zoomFactor() + 0.2, 5)
+        vprefs['lookup_zoom_factor'] = factor
+        self.setZoomFactor(factor)
 
     def zoom_out(self):
-        self.setZoomFactor(max(0.25, self.zoomFactor() - 0.2))
+        factor = max(0.25, self.zoomFactor() - 0.2)
+        vprefs['lookup_zoom_factor'] = factor
+        self.setZoomFactor(factor)
 
     def default_zoom(self):
+        vprefs['lookup_zoom_factor'] = 1
         self.setZoomFactor(1)
+
+    def set_initial_zoom_factor(self):
+        try:
+            self.setZoomFactor(float(vprefs.get('lookup_zoom_factor', 1)))
+        except Exception:
+            pass
 
 
 class View(QWebEngineView):
@@ -275,7 +316,7 @@ def set_sync_override(allowed):
 
 
 def blank_html():
-    msg = _('Double click on a word in the book\'s text to look it up.')
+    msg = _("Double click on a word in the book's text to look it up.")
     html = '<p>' + msg
     app = QApplication.instance()
     if app.is_dark_theme:
@@ -308,6 +349,7 @@ class Lookup(QWidget):
         apply_font_settings(self._page)
         secure_webengine(self._page, for_viewer=True)
         self.view.setPage(self._page)
+        self._page.set_initial_zoom_factor()
         l.addWidget(self.view)
         self.populate_sources()
         self.source_box.currentIndexChanged.connect(self.source_changed)

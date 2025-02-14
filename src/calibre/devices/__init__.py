@@ -5,7 +5,9 @@ __copyright__ = '2008, Kovid Goyal <kovid at kovidgoyal.net>'
 Device drivers.
 '''
 
-import sys, time, pprint
+import pprint
+import sys
+import time
 from functools import partial
 
 DAY_MAP   = dict(Sun=0, Mon=1, Tue=2, Wed=3, Thu=4, Fri=5, Sat=6)
@@ -23,7 +25,7 @@ def strptime(src):
 
 
 def strftime(epoch, zone=time.gmtime):
-    src = time.strftime("%w, %d %m %Y %H:%M:%S GMT", zone(epoch)).split()
+    src = time.strftime('%w, %d %m %Y %H:%M:%S GMT', zone(epoch)).split()
     src[0] = INVERSE_DAY_MAP[int(src[0][:-1])]+','
     src[2] = INVERSE_MONTH_MAP[int(src[2])]
     return ' '.join(src)
@@ -67,11 +69,12 @@ def debug(ioreg_to_tmp=False, buf=None, plugins=None,
     device plugins as the plugins parameter.
     '''
     import textwrap
+
+    from calibre import prints
+    from calibre.constants import debug, is_debugging, ismacos, iswindows
     from calibre.customize.ui import device_plugins, disabled_device_plugins
     from calibre.debug import print_basic_debug_info
     from calibre.devices.scanner import DeviceScanner
-    from calibre.constants import iswindows, ismacos, debug, is_debugging
-    from calibre import prints
     from polyglot.io import PolyglotStringIO
     oldo, olde = sys.stdout, sys.stderr
 
@@ -87,7 +90,7 @@ def debug(ioreg_to_tmp=False, buf=None, plugins=None,
             try:
                 d.startup()
             except:
-                out('Startup failed for device plugin: %s'%d)
+                out(f'Startup failed for device plugin: {d}')
 
     if disabled_plugins is None:
         disabled_plugins = list(disabled_device_plugins())

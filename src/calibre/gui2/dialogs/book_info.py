@@ -2,21 +2,41 @@
 # License: GPLv3 Copyright: 2008, Kovid Goyal <kovid at kovidgoyal.net>
 
 
-from enum import IntEnum
 import textwrap
+from enum import IntEnum
 
 from qt.core import (
-    QAction, QApplication, QBrush, QCheckBox, QDialog, QDialogButtonBox, QGridLayout,
-    QHBoxLayout, QIcon, QKeySequence, QLabel, QListView, QModelIndex, QPalette, QPixmap,
-    QPushButton, QShortcut, QSize, QSplitter, Qt, QTimer, QToolButton, QVBoxLayout,
-    QWidget, pyqtSignal,
+    QAction,
+    QApplication,
+    QBrush,
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QGridLayout,
+    QHBoxLayout,
+    QIcon,
+    QKeySequence,
+    QLabel,
+    QListView,
+    QModelIndex,
+    QPalette,
+    QPixmap,
+    QPushButton,
+    QShortcut,
+    QSize,
+    QSplitter,
+    Qt,
+    QTimer,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
 )
 
 from calibre import fit_image
-from calibre.gui2 import NO_URL_FORMATTING, gprefs
-from calibre.gui2.book_details import (
-    create_open_cover_with_menu, resolved_css, details_context_menu_event, render_html, set_html,
-)
+from calibre.db.constants import RESOURCE_URL_SCHEME
+from calibre.gui2 import BOOK_DETAILS_DISPLAY_DEBOUNCE_DELAY, NO_URL_FORMATTING, gprefs
+from calibre.gui2.book_details import DropMixin, create_open_cover_with_menu, details_context_menu_event, render_html, resolved_css, set_html
 from calibre.gui2.ui import get_gui
 from calibre.gui2.widgets import CoverView
 from calibre.gui2.widgets2 import Dialog, HTMLDisplay
@@ -27,13 +47,20 @@ class Cover(CoverView):
 
     open_with_requested = pyqtSignal(object)
     choose_open_with_requested = pyqtSignal()
+    copy_to_clipboard_requested = pyqtSignal()
+    download_cover = pyqtSignal()
 
     def __init__(self, parent, show_size=False):
         CoverView.__init__(self, parent, show_size=show_size)
 
+    def copy_to_clipboard(self):
+        self.copy_to_clipboard_requested.emit()
+
     def build_context_menu(self):
         ans = CoverView.build_context_menu(self)
         create_open_cover_with_menu(self, ans)
+        download = ans.addAction(QIcon.ic('download-metadata.png'), _('Download cover from internet'))
+        download.triggered.connect(self.download_cover)
         return ans
 
     def open_with(self, entry):
@@ -61,9 +88,7 @@ class Configure(Dialog):
         Dialog.__init__(self, _('Configure the Book details window'), 'book-details-popup-conf', parent)
 
     def setup_ui(self):
-        from calibre.gui2.preferences.look_feel import (
-            DisplayedFields, move_field_down, move_field_up,
-        )
+        from calibre.gui2.preferences.look_feel_tabs import DisplayedFields, move_field_down, move_field_up
         self.l = QVBoxLayout(self)
         self.field_display_order = fdo = QListView(self)
         self.model = DisplayedFields(self.db, fdo, pref_name='popup_book_display_fields')
@@ -119,6 +144,8 @@ class Configure(Dialog):
 
 class Details(HTMLDisplay):
 
+    notes_resource_scheme = RESOURCE_URL_SCHEME
+
     def __init__(self, book_info, parent=None, allow_context_menu=True, is_locked=False):
         HTMLDisplay.__init__(self, parent)
         self.book_info = book_info
@@ -126,6 +153,9 @@ class Details(HTMLDisplay):
         self.setDefaultStyleSheet(resolved_css())
         self.allow_context_menu = allow_context_menu
         self.is_locked = is_locked
+
+    def get_base_qurl(self):
+        return getattr(self.book_info, 'base_url_for_current_book', None)
 
     def sizeHint(self):
         return QSize(350, 350)
@@ -142,7 +172,7 @@ class DialogNumbers(IntEnum):
     DetailsLink = 2
 
 
-class BookInfo(QDialog):
+class BookInfo(QDialog, DropMixin):
 
     closed = pyqtSignal(object)
     open_cover_with = pyqtSignal(object, object)
@@ -150,6 +180,9 @@ class BookInfo(QDialog):
     def __init__(self, parent, view, row, link_delegate, dialog_number=None,
                  library_id=None, library_path=None, book_id=None):
         QDialog.__init__(self, parent)
+        DropMixin.__init__(self)
+        self.files_dropped.connect(self.on_files_dropped)
+        self.remote_file_dropped.connect(self.on_remote_file_dropped)
         self.dialog_number = dialog_number
         self.library_id = library_id
         self.marked = None
@@ -158,8 +191,11 @@ class BookInfo(QDialog):
         self._l = l = QVBoxLayout(self)
         self.setLayout(l)
         l.addWidget(self.splitter)
+        self.setAcceptDrops(True)
 
         self.cover = Cover(self, show_size=gprefs['bd_overlay_cover_size'])
+        self.cover.copy_to_clipboard_requested.connect(self.copy_cover_to_clipboard)
+        self.cover.download_cover.connect(self.download_cover)
         self.cover.resizeEvent = self.cover_view_resized
         self.cover.cover_changed.connect(self.cover_changed)
         self.cover.open_with_requested.connect(self.open_with)
@@ -170,7 +206,7 @@ class BookInfo(QDialog):
 
         self.details = Details(parent.book_details.book_info, self,
                                allow_context_menu=library_path is None,
-                               is_locked = dialog_number == DialogNumbers.Locked)
+                               is_locked=dialog_number == DialogNumbers.Locked)
         self.details.anchor_clicked.connect(self.on_link_clicked)
         self.link_delegate = link_delegate
         self.details.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
@@ -211,6 +247,10 @@ class BookInfo(QDialog):
         self.path_to_book = None
         self.current_row = None
         self.slave_connected = False
+        self.slave_debounce_timer = t = QTimer(self)
+        t.setInterval(BOOK_DETAILS_DISPLAY_DEBOUNCE_DELAY)
+        t.setSingleShot(True)
+        t.timeout.connect(self._debounce_refresh)
         if library_path is not None:
             self.view = None
             db = get_gui().library_broker.get_library(library_path)
@@ -220,8 +260,8 @@ class BookInfo(QDialog):
             mi = dbn.get_metadata(book_id, get_cover=False)
             mi.cover_data = [None, dbn.cover(book_id, as_image=True)]
             mi.path = None
-            mi.format_files = dict()
-            mi.formats = list()
+            mi.format_files = {}
+            mi.formats = []
             mi.marked = ''
             mi.field_metadata = db.field_metadata
             mi.external_library_path = library_path
@@ -265,6 +305,14 @@ class BookInfo(QDialog):
         except Exception:
             pass
 
+    def on_files_dropped(self, event, paths):
+        gui = get_gui()
+        gui.iactions['Add Books'].files_dropped_on_book(event, paths)
+
+    def on_remote_file_dropped(self, event, url):
+        gui = get_gui()
+        gui.iactions['Add Books'].remote_file_dropped_on_book(event, url)
+
     def geometry_string(self, txt):
         if self.dialog_number is None or self.dialog_number == DialogNumbers.Slaved:
             return txt
@@ -301,7 +349,7 @@ class BookInfo(QDialog):
 
     def on_link_clicked(self, qurl):
         link = str(qurl.toString(NO_URL_FORMATTING))
-        self.link_delegate(link)
+        self.link_delegate(link, self)
 
     def done(self, r):
         self.save_geometry(gprefs, self.geometry_string('book_info_dialog_geometry'))
@@ -309,6 +357,7 @@ class BookInfo(QDialog):
         ret = QDialog.done(self, r)
         if self.slave_connected:
             self.view.model().new_bookdisplay_data.disconnect(self.slave)
+        self.slave_debounce_timer.stop()  # OK if it isn't running
         self.view = self.link_delegate = self.gui = None
         self.closed.emit(self)
         return ret
@@ -333,6 +382,11 @@ class BookInfo(QDialog):
         QTimer.singleShot(1, self.resize_cover)
 
     def slave(self, mi):
+        self._mi_for_debounce = mi
+        self.slave_debounce_timer.start()  # start() will automatically reset the timer if it was already running
+
+    def _debounce_refresh(self):
+        mi, self._mi_for_debounce = self._mi_for_debounce, None
         self.refresh(mi.row_number, mi)
 
     def move(self, delta=1):
@@ -371,6 +425,17 @@ class BookInfo(QDialog):
         self.cover.set_pixmap(pixmap)
         self.cover.set_marked(self.marked)
         self.update_cover_tooltip()
+
+    def copy_cover_to_clipboard(self):
+        if self.cover_pixmap is not None:
+            QApplication.instance().clipboard().setPixmap(self.cover_pixmap)
+
+    def download_cover(self):
+        from calibre.gui2.book_details import download_cover
+        if self.current_row is not None:
+            book_id = self.view.model().id(self.current_row)
+            if pmap := download_cover(self, book_id, self.cover_pixmap):
+                self.cover_changed(pmap)
 
     def update_cover_tooltip(self):
         tt = ''
@@ -417,7 +482,7 @@ class BookInfo(QDialog):
         self.cover_pixmap.setDevicePixelRatio(dpr)
         self.marked = mi.marked
         self.resize_cover()
-        html = render_html(mi, True, self, pref_name='popup_book_display_fields')
+        html = render_html(mi, True, self, pref_name='popup_book_display_fields')[0]
         set_html(mi, html, self.details)
         self.update_cover_tooltip()
 

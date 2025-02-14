@@ -7,9 +7,25 @@ __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 import os
 from functools import partial
 from itertools import product
+
 from qt.core import (
-    QAction, QDockWidget, QEvent, QHBoxLayout, QIcon, QLabel, QMenu, QMenuBar, QSize,
-    QStackedWidget, Qt, QTabWidget, QTimer, QUrl, QVBoxLayout, QWidget, pyqtSignal,
+    QAction,
+    QDockWidget,
+    QEvent,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QMenu,
+    QMenuBar,
+    QSize,
+    QStackedWidget,
+    Qt,
+    QTabWidget,
+    QTimer,
+    QUrl,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
 )
 
 from calibre import prints
@@ -19,10 +35,7 @@ from calibre.gui2 import elided_text, open_url
 from calibre.gui2.keyboard import Manager as KeyboardManager
 from calibre.gui2.main_window import MainWindow
 from calibre.gui2.throbber import ThrobbingButton
-from calibre.gui2.tweak_book import (
-    actions, capitalize, current_container, editors, toolbar_actions, tprefs,
-    update_mark_text_action,
-)
+from calibre.gui2.tweak_book import actions, capitalize, current_container, editors, toolbar_actions, tprefs, update_mark_text_action
 from calibre.gui2.tweak_book.boss import Boss
 from calibre.gui2.tweak_book.char_select import CharSelect
 from calibre.gui2.tweak_book.check import Check
@@ -44,9 +57,7 @@ from calibre.gui2.tweak_book.toc import TOCViewer
 from calibre.gui2.tweak_book.undo import CheckpointView
 from calibre.gui2.widgets2 import MessagePopup
 from calibre.utils.icu import ord_string, sort_key
-from calibre.utils.localization import (
-    localize_user_manual_link, localize_website_link, pgettext,
-)
+from calibre.utils.localization import localize_user_manual_link, localize_website_link, pgettext
 from calibre.utils.unicode_names import character_name_from_code
 from polyglot.builtins import iteritems, itervalues
 
@@ -324,8 +335,8 @@ class Main(MainWindow):
         for v, h in product(('top', 'bottom'), ('left', 'right')):
             p = f'dock_{v}_{h}'
             pref = tprefs[p] or tprefs.defaults[p]
-            area = getattr(Qt.DockWidgetArea, '%sDockWidgetArea' % capitalize({'vertical':h, 'horizontal':v}[pref]))
-            self.setCorner(getattr(Qt.Corner, '%s%sCorner' % tuple(map(capitalize, (v, h)))), area)
+            area = getattr(Qt.DockWidgetArea, '{}DockWidgetArea'.format(capitalize({'vertical':h, 'horizontal':v}[pref])))
+            self.setCorner(getattr(Qt.Corner, '{}{}Corner'.format(*tuple(map(capitalize, (v, h))))), area)
         self.preview.apply_settings()
         self.live_css.apply_theme()
         for bar in (self.global_bar, self.tools_bar, self.plugins_bar):
@@ -390,7 +401,7 @@ class Main(MainWindow):
         self.action_save.setEnabled(False)
         self.action_save_copy = treg('save.png', _('Save a &copy'), self.boss.save_copy, 'save-copy', 'Ctrl+Alt+S', _('Save a copy of the book'))
         self.action_save_copy_edit = treg('save.png', _('Save a &copy and edit in new window'), partial(self.boss._save_copy, 'edit'), 'save-copy-edit',
-                                          'Ctrl+Shift+S', _( 'Save a copy of the book and edit it in a new window'))
+                                          'Ctrl+Shift+S', _('Save a copy of the book and edit it in a new window'))
         self.action_save_copy_replace = treg('save.png', _('Save a &copy and edit here'), partial(self.boss._save_copy, 'replace'),
                                              'save-copy-replace', 'Ctrl+Alt+Shift+S', _('Save a copy of the book and edit it in this window'))
         self.action_quit = treg('window-close.png', _('&Quit'), self.boss.quit, 'quit', 'Ctrl+Q', _('Quit'))
@@ -400,6 +411,9 @@ class Main(MainWindow):
                                       self.boss.import_book, 'import-book', (), _('Import an HTML or DOCX file as a new book'))
         self.action_quick_edit = treg('modified.png', _('&Quick open a file to edit'), self.boss.quick_open, 'quick-open', ('Ctrl+T'), _(
             'Quickly open a file from the book to edit it'))
+        self.action_editor_toggle_wrap = treg(
+            'format-justify-fill.png', _('Toggle code line &wrapping'), self.boss.toggle_line_wrapping_in_all_editors, 'editor-toggle-wrap', (), _(
+                'Toggle line wrapping in all code editor tabs'))
 
         # Editor actions
         group = _('Editor actions')
@@ -454,6 +468,8 @@ class Main(MainWindow):
         self.action_get_ext_resources = treg('download-metadata.png', _('Download external &resources'),
                                              self.boss.get_external_resources, 'get-external-resources', (), _(
             'Download external resources in the book (images/stylesheets/etc/ that are not included in the book)'))
+        self.action_embed_tts = treg('bullhorn.png', _('Add Text-to-speech narration'), self.boss.embed_tts, 'embed-tts', (), _(
+            'Add audio narration for all the book text using Text-to-speech generation'))
 
         def ereg(icon, text, target, sid, keys, description):
             return reg(icon, text, partial(self.boss.editor_action, target), sid, keys, description)
@@ -545,7 +561,7 @@ class Main(MainWindow):
             'edit-clear.png', _('Close tabs to the &right'), self.central.close_to_right_of_current_editor, 'close-tabs-to-right-of', 'Ctrl+Shift+W', _(
                 'Close tabs to the right of the current tab'))
         self.action_help = treg(
-            'help.png', _('User &Manual'), lambda : open_url(QUrl(localize_user_manual_link(
+            'help.png', _('User &Manual'), lambda: open_url(QUrl(localize_user_manual_link(
                 'https://manual.calibre-ebook.com/edit.html'))), 'user-manual', 'F1', _(
                 'Show User Manual'))
         self.action_browse_images = treg(
@@ -559,6 +575,9 @@ class Main(MainWindow):
         self.action_manage_snippets = treg(
             'snippets.png', _('Manage &Snippets'), self.boss.manage_snippets, 'manage-snippets', (), _(
                 'Manage user created Snippets'))
+        self.action_merge_files = treg(
+            'merge.png', _('&Merge files'), self.boss.merge_files, 'merge-files', 'Ctrl+M', _(
+                'Merge two or more selected files'))
 
         self.plugin_menu_actions = []
 
@@ -622,6 +641,7 @@ class Main(MainWindow):
         e.addAction(self.action_transform_styles)
         e.addAction(self.action_transform_html)
         e.addAction(self.action_fix_html_all)
+        e.addAction(self.action_embed_tts)
         e.addAction(self.action_pretty_all)
         e.addAction(self.action_rationalize_folders)
         e.addAction(self.action_add_cover)
@@ -638,7 +658,7 @@ class Main(MainWindow):
         e = b.addMenu(_('&View'))
         t = e.addMenu(_('Tool&bars'))
         e.addSeparator()
-        for name in sorted(actions, key=lambda x:sort_key(actions[x].text())):
+        for name in sorted(actions, key=lambda x: sort_key(actions[x].text())):
             ac = actions[name]
             if name.endswith('-dock'):
                 e.addAction(ac)
@@ -674,7 +694,7 @@ class Main(MainWindow):
 
         if self.plugin_menu_actions:
             e = b.addMenu(_('&Plugins'))
-            for ac in sorted(self.plugin_menu_actions, key=lambda x:sort_key(str(x.text()))):
+            for ac in sorted(self.plugin_menu_actions, key=lambda x: sort_key(str(x.text()))):
                 e.addAction(ac)
 
         e = b.addMenu(_('&Help'))
@@ -832,7 +852,7 @@ class Main(MainWindow):
         cc = current_container()
         if cc is not None:
             fname = os.path.basename(cc.path_to_ebook)
-            self.setWindowTitle(self.current_metadata.title + ' [%s] :: %s :: %s' %(cc.book_type_for_display, fname, self.APP_NAME))
+            self.setWindowTitle(self.current_metadata.title + f' [{cc.book_type_for_display}] :: {fname} :: {self.APP_NAME}')
         else:
             self.setWindowTitle(self.APP_NAME)
 

@@ -8,8 +8,7 @@ __docformat__ = 'restructuredtext en'
 from functools import partial
 from zipfile import ZipFile
 
-from qt.core import (QToolButton, QAction, QIcon, QObject, QMenu, QPoint,
-        QKeySequence)
+from qt.core import QAction, QIcon, QKeySequence, QMenu, QObject, QPoint, QTimer, QToolButton
 
 from calibre import prints
 from calibre.constants import ismacos
@@ -19,7 +18,7 @@ from polyglot.builtins import string_or_bytes
 
 
 def toolbar_widgets_for_action(gui, action):
-    # Search the the toolbars for the widget associated with an action, passing
+    # Search the toolbars for the widget associated with an action, passing
     # them to the caller for further processing
     for x in gui.bars_manager.bars:
         try:
@@ -32,7 +31,7 @@ def toolbar_widgets_for_action(gui, action):
             # The button might be hidden
             if not w.isVisible():
                 continue
-            yield(w)
+            yield w
         except Exception:
             continue
 
@@ -69,17 +68,23 @@ def show_menu_under_widget(gui, menu, action, name):
                 return
             except Exception:
                 continue
+    # Is it one of the status bar buttons?
+    for button in gui.status_bar_extra_buttons:
+        if name == button.action_name and button.isVisible():
+            r = button.geometry()
+            p = gui.status_bar
+            menu.exec(p.mapToGlobal(QPoint(r.x()+2, r.height()-2)))
+            return
     # No visible button found. Fall back to displaying in upper left corner
     # of the library view.
     menu.exec(gui.library_view.mapToGlobal(QPoint(10, 10)))
 
 
 def menu_action_unique_name(plugin, unique_name):
-    return '%s : menu action : %s'%(plugin.unique_name, unique_name)
+    return f'{plugin.unique_name} : menu action : {unique_name}'
 
 
 class InterfaceAction(QObject):
-
     '''
     A plugin representing an "action" that can be taken in the graphical user
     interface. All the items in the toolbar and context menus are implemented
@@ -211,7 +216,7 @@ class InterfaceAction(QObject):
         bn = self.__class__.__name__
         if getattr(self.interface_action_base_plugin, 'name'):
             bn = self.interface_action_base_plugin.name
-        return 'Interface Action: %s (%s)'%(bn, self.name)
+        return f'Interface Action: {bn} ({self.name})'
 
     def create_action(self, spec=None, attr='qaction', shortcut_name=None, persist_shortcut=False):
         if spec is None:
@@ -438,3 +443,36 @@ class InterfaceAction(QObject):
         long periods of time.
         '''
         pass
+
+
+class InterfaceActionWithLibraryDrop(InterfaceAction):
+    '''
+    Subclass of InterfaceAction that implements methods to execute the default action
+    by drop some books from the library.
+
+    Inside the do_drop() method, the ids of the dropped books are provided
+    by the attribute self.dropped_ids
+    '''
+
+    accepts_drops = True
+    mimetype_for_drop = 'application/calibre+from_library'
+
+    def accept_enter_event(self, event, mime_data):
+        if mime_data.hasFormat(self.mimetype_for_drop):
+            return True
+        return False
+
+    def accept_drag_move_event(self, event, mime_data):
+        if mime_data.hasFormat(self.mimetype_for_drop):
+            return True
+        return False
+
+    def drop_event(self, event, mime_data):
+        if mime_data.hasFormat(self.mimetype_for_drop):
+            self.dropped_ids = tuple(map(int, mime_data.data(self.mimetype_for_drop).data().split()))
+            QTimer.singleShot(1, self.do_drop)
+            return True
+        return False
+
+    def do_drop(self):
+        raise NotImplementedError()

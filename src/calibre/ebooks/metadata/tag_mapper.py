@@ -4,7 +4,8 @@
 
 from collections import deque
 
-from calibre.utils.icu import lower as icu_lower, upper as icu_upper
+from calibre.utils.icu import lower as icu_lower
+from calibre.utils.icu import upper as icu_upper
 from polyglot.builtins import as_unicode
 
 
@@ -118,7 +119,7 @@ def uniq(vals, kmap=icu_lower):
     lvals = (kmap(x) for x in vals)
     seen = set()
     seen_add = seen.add
-    return list(x for x, k in zip(vals, lvals) if k not in seen and not seen_add(k))
+    return [x for x, k in zip(vals, lvals) if k not in seen and not seen_add(k)]
 
 
 def map_tags(tags, rules=()):

@@ -13,7 +13,6 @@ from threading import Lock
 from calibre.prints import prints
 from polyglot.builtins import as_unicode
 
-
 DEBUG = 0
 INFO  = 1
 WARN  = 2
@@ -246,7 +245,6 @@ class ThreadSafeWrapper(Log):
 
 
 class GUILog(ThreadSafeLog):
-
     '''
     Logs in HTML and plain text as unicode. Ideal for display in a GUI context.
     '''

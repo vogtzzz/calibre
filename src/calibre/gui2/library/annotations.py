@@ -6,31 +6,51 @@ import json
 import os
 import re
 from functools import lru_cache, partial
-from qt.core import (
-    QAbstractItemView, QApplication, QCheckBox, QComboBox, QDateTime, QDialog,
-    QDialogButtonBox, QFont, QFormLayout, QFrame, QHBoxLayout, QIcon, QKeySequence,
-    QLabel, QLocale, QMenu, QPalette, QPlainTextEdit, QSize, QSplitter, Qt,
-    QTextBrowser, QTimer, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
-    QWidget, pyqtSignal,
-)
 from urllib.parse import quote
 
-from calibre import prepare_string_for_xml
-from calibre.constants import (
-    builtin_colors_dark, builtin_colors_light, builtin_decorations,
+from qt.core import (
+    QAbstractItemView,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDateTime,
+    QDialog,
+    QDialogButtonBox,
+    QFont,
+    QFormLayout,
+    QFrame,
+    QHBoxLayout,
+    QIcon,
+    QKeySequence,
+    QLabel,
+    QLocale,
+    QMenu,
+    QPalette,
+    QPlainTextEdit,
+    QSize,
+    QSplitter,
+    Qt,
+    QTextBrowser,
+    QTimer,
+    QToolButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
 )
+
+from calibre import prepare_string_for_xml
+from calibre.constants import builtin_colors_dark, builtin_colors_light, builtin_decorations
 from calibre.db.backend import FTSQueryError
 from calibre.ebooks.metadata import authors_to_string, fmt_sidx
-from calibre.gui2 import (
-    Application, choose_save_file, config, error_dialog, gprefs, is_dark_theme,
-    safe_open_url,
-)
+from calibre.gui2 import Application, choose_save_file, config, error_dialog, gprefs, is_dark_theme, safe_open_url
 from calibre.gui2.dialogs.confirm_delete import confirm
 from calibre.gui2.viewer.widgets import ResultsDelegate, SearchBox
 from calibre.gui2.widgets import BusyCursor
 from calibre.gui2.widgets2 import Dialog, RightClickButton
 from calibre.startup import connect_lambda
-from calibre.utils.localization import ngettext
+from calibre.utils.localization import ngettext, pgettext
 
 
 def render_timestamp(ts):
@@ -150,7 +170,7 @@ def render_note_line(line):
         yield prepare_string_for_xml(line)
         return
     pos = 0
-    for (s, e) in urls:
+    for s,e in urls:
         if s > pos:
             yield prepare_string_for_xml(line[pos:s])
         yield '<a href="{0}">{0}</a>'.format(prepare_string_for_xml(line[s:e], True))
@@ -182,7 +202,7 @@ def friendly_username(user_type, user):
 
 def annotation_title(atype, singular=False):
     if singular:
-        return {'bookmark': _('Bookmark'), 'highlight': _('Highlight')}.get(atype, atype)
+        return {'bookmark': _('Bookmark'), 'highlight': pgettext('type of annotation', 'Highlight')}.get(atype, atype)
     return {'bookmark': _('Bookmarks'), 'highlight': _('Highlights')}.get(atype, atype)
 
 
@@ -205,7 +225,6 @@ class AnnotsResultsDelegate(ResultsDelegate):
         else:
             text = parts[0]
         return False, before, text, after, bool(result.get('annotation', {}).get('notes'))
-
 
 # }}}
 
@@ -249,7 +268,7 @@ def css_for_highlight_style(style):
     elif 'background-color' in style:
         ans = 'background-color: ' + style['background-color']
         if 'color' in style:
-            ans += '; color: ' + style["color"]
+            ans += '; color: ' + style['color']
     elif kind == 'decoration':
         which = style.get('which')
         if which is not None:
@@ -863,7 +882,7 @@ class DetailsPanel(QWidget):
         paras = []
 
         def p(text, tag='p'):
-            paras.append('<{0}>{1}</{0}>'.format(tag, a(text)))
+            paras.append(f'<{tag}>{a(text)}</{tag}>')
 
         if annot['type'] == 'bookmark':
             p(annot['title'])
@@ -906,7 +925,7 @@ class DetailsPanel(QWidget):
             atype=a(atype), text=annot_text, dt=_('Date'), date=a(date), ut=a(_('User')),
             user=a(friendly_username(r['user_type'], r['user'])), highlight_css=highlight_css,
             ov=a(_('Open in viewer')), sic=a(_('Show in calibre')),
-            ovtt=a(_('Open the book at this annotation in the calibre E-book viewer')),
+            ovtt=a(_('View the book at this annotation in the calibre E-book viewer')),
             sictt=(_('Show this book in the main calibre book list')),
         )
         self.text_browser.setHtml(text)
@@ -1061,7 +1080,7 @@ class AnnotationsBrowser(Dialog):
         else:
             self.reinitialize(restrict_to_book_ids)
             self.show()
-            self.raise_()
+            self.raise_and_focus()
             QTimer.singleShot(80, self.browse_panel.effective_query_changed)
 
     def selection_changed(self):

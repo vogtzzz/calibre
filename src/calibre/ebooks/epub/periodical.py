@@ -5,11 +5,12 @@ __license__   = 'GPL v3'
 __copyright__ = '2010, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-from uuid import uuid4
 import time
+from uuid import uuid4
 
+from calibre import prepare_string_for_xml as xml
+from calibre import strftime
 from calibre.constants import __appname__, __version__
-from calibre import strftime, prepare_string_for_xml as xml
 from calibre.utils.date import parse_date
 
 SONY_METADATA = '''\
@@ -136,7 +137,7 @@ def sony_metadata(oeb):
     for i, section in enumerate(toc):
         if not section.href:
             continue
-        secid = 'section%d'%i
+        secid = f'section{i}'
         sectitle = section.title
         if not sectitle:
             sectitle = _('Unknown')
@@ -169,7 +170,7 @@ def sony_metadata(oeb):
             desc = section.description
             if not desc:
                 desc = ''
-            aid = 'article%d'%j
+            aid = f'article{j}'
 
             entries.append(SONY_ATOM_ENTRY.format(
                 title=xml(atitle),

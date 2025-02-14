@@ -5,10 +5,10 @@ __license__ = 'GPL v3'
 __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 
 import string
-from polyglot.builtins import iteritems
 
-from calibre.utils.config import JSONConfig
 from calibre.spell.dictionary import Dictionaries, parse_lang_code
+from calibre.utils.config import JSONConfig
+from polyglot.builtins import iteritems
 
 CONTAINER_DND_MIMETYPE = 'application/x-calibre-container-name-list'
 tprefs = JSONConfig('tweak_book_gui')
@@ -19,6 +19,7 @@ d['editor_font_family'] = None
 d['editor_font_size'] = 12
 d['editor_line_wrap'] = True
 d['editor_tab_stop_width'] = 2
+d['editor_cursor_width'] = 1
 d['editor_show_char_under_cursor'] = True
 d['replace_entities_as_typed'] = True
 d['preview_refresh_time'] = 2
@@ -42,7 +43,17 @@ d['preview_background'] = 'auto'
 d['preview_foreground'] = 'auto'
 d['preview_link_color'] = 'auto'
 d['remove_existing_links_when_linking_sheets'] = True
-d['charmap_favorites'] = list(map(ord, '\xa0\u2002\u2003\u2009\xad' '‘’“”‹›«»‚„' '—–§¶†‡©®™' '→⇒•·°±−×÷¼½½¾' '…µ¢£€¿¡¨´¸ˆ˜' 'ÀÁÂÃÄÅÆÇÈÉÊË' 'ÌÍÎÏÐÑÒÓÔÕÖØ' 'ŒŠÙÚÛÜÝŸÞßàá' 'âãäåæçèéêëìí' 'îïðñòóôõöøœš' 'ùúûüýÿþªºαΩ∞'))  # noqa
+d['charmap_favorites'] = list(map(ord, ('\xa0\u2002\u2003\u2009\xad'
+                                        '‘’“”‹›«»‚„'
+                                        '—–§¶†‡©®™'
+                                        '→⇒•·°±−×÷¼½½¾'
+                                        '…µ¢£€¿¡¨´¸ˆ˜'
+                                        'ÀÁÂÃÄÅÆÇÈÉÊË'
+                                        'ÌÍÎÏÐÑÒÓÔÕÖØ'
+                                        'ŒŠÙÚÛÜÝŸÞßàá'
+                                        'âãäåæçèéêëìí'
+                                        'îïðñòóôõöøœš'
+                                        'ùúûüýÿþªºαΩ∞')))
 d['folders_for_types'] = {'style':'styles', 'image':'images', 'font':'fonts', 'audio':'audio', 'video':'video'}
 d['pretty_print_on_open'] = False
 d['disable_completion_popup_for_search'] = False
@@ -57,7 +68,7 @@ d['merge_identical_selectors'] = False
 d['merge_rules_with_identical_properties'] = False
 d['remove_unreferenced_sheets'] = True
 d['global_book_toolbar'] = [
-'new-file', 'open-book',  'save-book', None, 'global-undo', 'global-redo', 'create-checkpoint', None, 'donate', 'user-manual']
+'new-file', 'open-book', 'save-book', None, 'global-undo', 'global-redo', 'create-checkpoint', None, 'donate', 'user-manual']
 d['global_tools_toolbar'] = [
     'check-book', 'spell-check-book', 'edit-toc', 'insert-character',
     'manage-fonts', 'smarten-punctuation', 'remove-unused-css', 'show-reports'
@@ -110,7 +121,7 @@ class NonReplaceDict(dict):
 
     def __setitem__(self, k, v):
         if k in self:
-            raise ValueError('The key %s is already present' % k)
+            raise ValueError(f'The key {k} is already present')
         dict.__setitem__(self, k, v)
 
 

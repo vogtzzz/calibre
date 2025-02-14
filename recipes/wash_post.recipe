@@ -1,18 +1,22 @@
+#!/usr/bin/env python
+# vim:fileencoding=utf-8
 __license__ = 'GPL v3'
 __copyright__ = '2011, Darko Miletic <darko.miletic at gmail.com>'
 '''
 www.washingtonpost.com
 '''
 
-from calibre.web.feeds.news import BasicNewsRecipe
-from html5_parser import parse
 import json
+
+from html5_parser import parse
+
+from calibre.web.feeds.news import BasicNewsRecipe
 
 
 class TheWashingtonPost(BasicNewsRecipe):
     title = 'The Washington Post'
     __author__ = 'Darko Miletic, unkn0wn'
-    description = 'Leading source for news, video and opinion on politics, business, world and national news, science, travel, entertainment and more. Our local coverage includes reporting on education, crime, weather, traffic, real estate, jobs and cars for DC, Maryland and Virginia. Offering award-winning opinion writing, entertainment information and restaurant reviews.'  # noqa
+    description = 'Leading source for news, video and opinion on politics, business, world and national news, science, travel, entertainment and more. Our local coverage includes reporting on education, crime, weather, traffic, real estate, jobs and cars for DC, Maryland and Virginia. Offering award-winning opinion writing, entertainment information and restaurant reviews.'  # noqa: E501
     publisher = 'The Washington Post Company'
     category = 'news, politics, USA'
     oldest_article = 1.2
@@ -20,18 +24,36 @@ class TheWashingtonPost(BasicNewsRecipe):
     no_stylesheets = True
     encoding = 'utf8'
     use_embedded_content = False
-    language = 'en'
+    language = 'en_US'
     remove_empty_feeds = True
     ignore_duplicate_articles = {'url'}
     masthead_url = 'https://www.washingtonpost.com/pb/resources/img/twp-masthead-415x57.svg'
     publication_type = 'newspaper'
     remove_attributes = ['style', 'width', 'height']
 
+    recipe_specific_options = {
+        'days': {
+            'short': 'Oldest article to download from this news source. In days ',
+            'long': 'For example, 0.5, gives you articles from the past 12 hours',
+            'default': str(oldest_article)
+        }
+    }
+
+    def __init__(self, *args, **kwargs):
+        BasicNewsRecipe.__init__(self, *args, **kwargs)
+        d = self.recipe_specific_options.get('days')
+        if d and isinstance(d, str):
+            self.oldest_article = float(d)
+
     extra_css = '''
         .img { text-align:center; font-size:small; }
         .auth { font-weight:bold; font-size:small; }
         .time { font-size:small; color: #202020; }
     '''
+
+    def get_browser(self):
+        return BasicNewsRecipe.get_browser(
+            self, verify_ssl_certificates=False, user_agent='Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0')
 
     # Official feeds: https://www.washingtonpost.com/discussions/2018/10/12/washington-post-rss-feeds/
     feeds = [
@@ -65,8 +87,8 @@ class TheWashingtonPost(BasicNewsRecipe):
 
         author = ''
         if 'credits' in data:
-            author = '<div><span class="auth">' + 'By ' + ', '.join(x['name'] for x in data['credits']['by']) \
-                 + '</span> | <span class="time">' + data['publish_date'][:-14] + '</span></div>'
+            author = ('<div><span class="auth">' + 'By ' + ', '.join(x['name'] for x in data['credits']['by']) +
+                      '</span> | <span class="time">' + data['publish_date'][:-14] + '</span></div>')
 
         body = ''
         for x in data['content_elements']:

@@ -2,13 +2,12 @@ __license__   = 'GPL v3'
 __copyright__ = '2008, Kovid Goyal <kovid at kovidgoyal.net>'
 
 
-import gc, os
+import gc
+import os
 import sys
 import weakref
-from qt.core import (
-    QAction, QIcon, QKeySequence, QMainWindow, QMenu, QMenuBar, QObject, Qt, QTimer,
-    pyqtSignal
-)
+
+from qt.core import QAction, QIcon, QKeySequence, QMainWindow, QMenu, QMenuBar, QObject, Qt, QTimer, pyqtSignal
 
 from calibre import as_unicode, prepare_string_for_xml, prints
 from calibre.constants import iswindows
@@ -27,7 +26,6 @@ Launch the Graphical User Interface
 
 
 class GarbageCollector(QObject):
-
     '''
     Disable automatic garbage collection and instead collect manually
     every INTERVAL milliseconds.
@@ -119,7 +117,7 @@ class MainWindow(QMainWindow):
     def native_menubar(self):
         return self.___menu_bar
 
-    def __init__(self, opts, parent=None, disable_automatic_gc=False):
+    def __init__(self, opts=None, parent=None, disable_automatic_gc=False):
         QMainWindow.__init__(self, parent)
         self.display_unhandled_exception.connect(self.unhandled_exception, type=Qt.ConnectionType.QueuedConnection)
         if disable_automatic_gc:
@@ -137,8 +135,9 @@ class MainWindow(QMainWindow):
     def show_possible_sharing_violation(self, e: Exception, det_msg: str = '') -> bool:
         if not iswindows or not isinstance(e, OSError):
             return False
-        from calibre_extensions import winutil
         import errno
+
+        from calibre_extensions import winutil
         if not (e.winerror == winutil.ERROR_SHARING_VIOLATION or e.errno == errno.EACCES or isinstance(e, PermissionError)):
             return False
         msg = getattr(e, 'locking_violation_msg', '')
@@ -234,7 +233,7 @@ class MainWindow(QMainWindow):
                     return
             except Exception:
                 traceback.print_exc()
-            msg = '<b>%s</b>:'%exc_type.__name__ + prepare_string_for_xml(as_unicode(value))
+            msg = f'<b>{exc_type.__name__}</b>:' + prepare_string_for_xml(as_unicode(value))
             error_dialog(self, _('Unhandled exception'), msg, det_msg=fe,
                     show=True)
         except BaseException:

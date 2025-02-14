@@ -17,15 +17,15 @@ from calibre.utils.smtp import config as email_config
 
 def local_url_for_content_server():
     from calibre.srv.opts import server_config
+    from calibre.utils.network import format_addr_for_url, get_fallback_server_addr
+
     opts = server_config()
-    interface = opts.listen_on or '0.0.0.0'
-    interface = {'0.0.0.0': '127.0.0.1', '::':'::1'}.get(interface)
+    addr = opts.listen_on or get_fallback_server_addr()
+    addr = {'0.0.0.0': '127.0.0.1', '::': '::1'}.get(addr, addr)
     protocol = 'https' if opts.ssl_certfile and opts.ssl_keyfile else 'http'
     prefix = opts.url_prefix or ''
     port = opts.port
-    if ':' in interface:
-        interface = f'[{interface}]'
-    return f'{protocol}://{interface}:{port}{prefix}'
+    return f'{protocol}://{format_addr_for_url(addr)}:{port}{prefix}'
 
 
 def open_in_browser():
@@ -59,7 +59,7 @@ class ShareConnMenu(QMenu):  # {{{
             _('Start Content server'))
         connect_lambda(self.toggle_server_action.triggered, self, lambda self: self.toggle_server.emit())
         self.open_server_in_browser_action = self.addAction(
-            QIcon.ic('forward.png'), _("Visit Content server in browser"))
+            QIcon.ic('forward.png'), _('Visit Content server in browser'))
         connect_lambda(self.open_server_in_browser_action.triggered, self, lambda self: open_in_browser())
         self.open_server_in_browser_action.setVisible(False)
         self.control_smartdevice_action = \
@@ -75,7 +75,7 @@ class ShareConnMenu(QMenu):  # {{{
             prefix = 'Share/Connect Menu '
             gr = ConnectShareAction.action_spec[0]
             for attr in ('folder', ):
-                ac = getattr(self, 'connect_to_%s_action'%attr)
+                ac = getattr(self, f'connect_to_{attr}_action')
                 r(prefix + attr, str(ac.text()), action=ac,
                         group=gr)
             r(prefix+' content server', _('Start/stop Content server'),
@@ -83,12 +83,12 @@ class ShareConnMenu(QMenu):  # {{{
             r(prefix + ' open server in browser', self.open_server_in_browser_action.text(), action=self.open_server_in_browser_action, group=gr)
 
     def server_state_changed(self, running):
-        from calibre.utils.mdns import get_external_ip, verify_ipV4_address
+        from calibre.utils.mdns import get_external_ip, verify_ip_address
         text = _('Start Content server')
         if running:
             from calibre.srv.opts import server_config
             opts = server_config()
-            listen_on = verify_ipV4_address(opts.listen_on) or get_external_ip()
+            listen_on = verify_ip_address(opts.listen_on) or get_external_ip()
             protocol = 'HTTPS' if opts.ssl_certfile and opts.ssl_keyfile else 'HTTP'
             try:
                 ip_text = ' ' + _('[{ip}, port {port}, {protocol}]').format(
@@ -175,8 +175,8 @@ class ShareConnMenu(QMenu):  # {{{
     def set_state(self, device_connected, device):
         self.connect_to_folder_action.setEnabled(not device_connected)
 
-
 # }}}
+
 
 class SendToDeviceAction(InterfaceAction):
 
@@ -300,12 +300,11 @@ class ConnectShareAction(InterfaceAction):
             use_fixed_port = dm.get_option('smartdevice', 'use_fixed_port')
             port_number = dm.get_option('smartdevice', 'port_number')
             if show_port and use_fixed_port:
-                text = self.share_conn_menu.DEVICE_MSGS[1]  + ' [%s, port %s]'%(
-                                            formatted_addresses, port_number)
+                text = self.share_conn_menu.DEVICE_MSGS[1]  + f' [{formatted_addresses}, port {port_number}]'
             else:
                 text = self.share_conn_menu.DEVICE_MSGS[1] + ' [' + formatted_addresses + ']'
 
         icon = 'green' if running else 'red'
         ac = self.share_conn_menu.control_smartdevice_action
-        ac.setIcon(QIcon.ic('dot_%s.png'%icon))
+        ac.setIcon(QIcon.ic(f'dot_{icon}.png'))
         ac.setText(text)

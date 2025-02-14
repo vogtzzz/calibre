@@ -7,10 +7,33 @@ __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 from collections import namedtuple
 
 from qt.core import (
-    QColor, QBrush, QFont, QApplication, QPalette, QComboBox,
-    QPushButton, QIcon, QFormLayout, QLineEdit, QWidget, QScrollArea,
-    QVBoxLayout, Qt, QHBoxLayout, pyqtSignal, QPixmap, QColorDialog, QDialog,
-    QToolButton, QCheckBox, QSize, QLabel, QSplitter, QTextCharFormat, QDialogButtonBox)
+    QApplication,
+    QBrush,
+    QCheckBox,
+    QColor,
+    QColorDialog,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFont,
+    QFormLayout,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QLineEdit,
+    QPalette,
+    QPixmap,
+    QPushButton,
+    QScrollArea,
+    QSize,
+    QSplitter,
+    Qt,
+    QTextCharFormat,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
+)
 
 from calibre.gui2 import error_dialog
 from calibre.gui2.tweak_book import tprefs
@@ -32,12 +55,12 @@ def default_theme():
 
 
 # The solarized themes {{{
-SLDX = {'base03':'1c1c1c', 'base02':'262626', 'base01':'585858', 'base00':'626262', 'base0':'808080', 'base1':'8a8a8a', 'base2':'e4e4e4', 'base3':'ffffd7', 'yellow':'af8700', 'orange':'d75f00', 'red':'d70000', 'magenta':'af005f', 'violet':'5f5faf', 'blue':'0087ff', 'cyan':'00afaf', 'green':'5f8700'}  # noqa
-SLD  = {'base03':'002b36', 'base02':'073642', 'base01':'586e75', 'base00':'657b83', 'base0':'839496', 'base1':'93a1a1', 'base2':'eee8d5', 'base3':'fdf6e3', 'yellow':'b58900', 'orange':'cb4b16', 'red':'dc322f', 'magenta':'d33682', 'violet':'6c71c4', 'blue':'268bd2', 'cyan':'2aa198', 'green':'859900'}  # noqa
-m = {'base%d'%n:'base%02d'%n for n in range(1, 4)}
-m.update({'base%02d'%n:'base%d'%n for n in range(1, 4)})
-SLL = {m.get(k, k) : v for k, v in iteritems(SLD)}
-SLLX = {m.get(k, k) : v for k, v in iteritems(SLDX)}
+SLDX = {'base03':'1c1c1c', 'base02':'262626', 'base01':'585858', 'base00':'626262', 'base0':'808080', 'base1':'8a8a8a', 'base2':'e4e4e4', 'base3':'ffffd7', 'yellow':'af8700', 'orange':'d75f00', 'red':'d70000', 'magenta':'af005f', 'violet':'5f5faf', 'blue':'0087ff', 'cyan':'00afaf', 'green':'5f8700'}  # noqa: E501
+SLD  = {'base03':'002b36', 'base02':'073642', 'base01':'586e75', 'base00':'657b83', 'base0':'839496', 'base1':'93a1a1', 'base2':'eee8d5', 'base3':'fdf6e3', 'yellow':'b58900', 'orange':'cb4b16', 'red':'dc322f', 'magenta':'d33682', 'violet':'6c71c4', 'blue':'268bd2', 'cyan':'2aa198', 'green':'859900'}  # noqa: E501
+m = {f'base{n}':f'base{n:02}' for n in range(1, 4)}
+m.update({f'base{n:02}':f'base{n}' for n in range(1, 4)})
+SLL =  {m.get(k, k): v for k, v in iteritems(SLD)}
+SLLX = {m.get(k, k): v for k, v in iteritems(SLDX)}
 SOLARIZED = \
     '''
     CursorLine   bg={base02}
@@ -66,7 +89,7 @@ SOLARIZED = \
     Statement    fg={green} bold
     Keyword      fg={green}
     Special      fg={red}
-    SpecialCharacter bg={base02}
+    SpecialCharacter bg={base03}
 
     Error        us=wave uc={red}
     SpellError   us=wave uc={orange}
@@ -113,7 +136,7 @@ THEMES = {
     Special      fg={special}
     Error        us=wave uc=red
     SpellError   us=wave uc=orange
-    SpecialCharacter bg={cursor_loc}
+    SpecialCharacter bg=666666
     Link         fg=cyan
     BadLink      fg={string} us=wave uc=red
 
@@ -160,7 +183,7 @@ THEMES = {
     Statement    fg={keyword}
     Keyword      fg={keyword}
     Special      fg={special} italic
-    SpecialCharacter bg={cursor_loc}
+    SpecialCharacter bg=afafaf
     Error        us=wave uc=red
     SpellError   us=wave uc=magenta
     Link         fg=blue
@@ -318,8 +341,8 @@ def builtin_theme_names():
 def all_theme_names():
     return builtin_theme_names() + custom_theme_names()
 
-# Custom theme creation/editing {{{
 
+# Custom theme creation/editing {{{
 
 class CreateNewTheme(Dialog):
 
@@ -358,7 +381,7 @@ class CreateNewTheme(Dialog):
 
 
 def col_to_string(color):
-    return '%02X%02X%02X' % color.getRgb()[:3]
+    return '{:02X}{:02X}{:02X}'.format(*color.getRgb()[:3])
 
 
 class ColorButton(QPushButton):
@@ -477,8 +500,8 @@ class Property(QWidget):
         self.data['underline'] = str(self.underline.currentText()) or None
         self.changed.emit()
 
-# Help text {{{
 
+# Help text {{{
 
 HELP_TEXT = _('''\
 <h2>Creating a custom theme</h2>
@@ -493,45 +516,45 @@ the color of the blinking cursor.</p>
 <p>As you make changes to your theme on the left, the changes will be reflected live in this panel.</p>
 
 <p xml:lang="und">
-{}
+{Normal}
     The most important rule. Sets the foreground and background colors for the \
     editor as well as the style of "normal" text, that is, text that does not match any special syntax.
 
-{}
+{Visual}
     Defines the colors for text selected by the mouse.
 
-{}
+{CursorLine}
     Defines the color for the line containing the cursor.
 
-{}
+{LineNr}
     Defines the colors for the line numbers on the left.
 
-{}
+{MatchParen}
     Defines the colors for matching tags in HTML and matching
     braces in CSS.
 
-{}
+{Function}
     Used for highlighting tags in HTML
 
-{}
+{Type}
     Used for highlighting attributes in HTML
 
-{}
+{Statement}
     Tag names in HTML
 
-{}
+{Constant}
     Namespace prefixes in XML and constants in CSS
 
-{}
-    Non–breaking\xa0spaces/hyphens in HTML
+{SpecialCharacter}
+    Non{endash}breaking{nbsp}spaces/hyphens in HTML
 
-{}
+{Error}
     Syntax errors such as <this <>
 
-{}
+{SpellError}
     Misspelled words such as <span lang="en">thisword</span>
 
-{}
+{Comment}
     Comments like <!-- this one -->
 
 </p>
@@ -588,13 +611,14 @@ class ThemeEditor(Dialog):
 
         from calibre.gui2.tweak_book.editor.text import TextEdit
         self.preview = p = TextEdit(self, expected_geometry=(73, 50))
-        p.load_text(HELP_TEXT.format(
-                *('<b>%s</b>' % x for x in (
-                    'Normal', 'Visual', 'CursorLine', 'LineNr', 'MatchParen',
-                    'Function', 'Type', 'Statement', 'Constant', 'SpecialCharacter',
-                    'Error', 'SpellError', 'Comment'
-                ))
-            ))
+        t = {x: f'<b>{x}</b>' for x in (
+            'Normal', 'Visual', 'CursorLine', 'LineNr', 'MatchParen',
+            'Function', 'Type', 'Statement', 'Constant', 'SpecialCharacter',
+            'Error', 'SpellError', 'Comment')
+        }
+        t['nbsp'] = '\xa0'
+        t['endash'] = '–'
+        p.load_text(HELP_TEXT.format(**t))
         p.setMaximumWidth(p.size_hint.width() + 5)
         s.setMinimumWidth(600)
         self.splitter = sp = QSplitter(self)

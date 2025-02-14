@@ -4,15 +4,17 @@
 
 import bz2
 import os
+import ssl
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.request import urlopen
 
 
 def download_from_calibre_server(url):
     ca = os.path.join(sys.resources_location, 'calibre-ebook-root-CA.crt')
-    with urlopen(url, cafile=ca) as f:
-        return f.read()
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ssl_context.load_verify_locations(ca)
+    return urlopen(url, context=ssl_context).read()
 
 
 def filter_ans(ans):
@@ -49,7 +51,7 @@ def get_data():
     ans = {
         'common_user_agents': common,
         'user_agents_popularity': ua_freq_map,
-        'timestamp': datetime.utcnow().isoformat() + '+00:00',
+        'timestamp': datetime.now(timezone.utc).isoformat(),
     }
     ans['desktop_platforms'] = list(all_desktop_platforms(ans['common_user_agents']))
     return ans

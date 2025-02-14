@@ -5,7 +5,11 @@ __license__   = 'GPL v3'
 __copyright__ = '2009, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import re, codecs, sys
+import codecs
+import re
+import sys
+
+from calibre import xml_replace_entities
 
 _encoding_pats = (
     # XML declaration
@@ -15,6 +19,7 @@ _encoding_pats = (
     # HTML 4 Pragma directive
     r'''<meta\s+?[^<>]*?content\s*=\s*['"][^'"]*?charset=([-_a-z0-9]+)[^'"]*?['"][^<>]*>(?:\s*</meta>){0,1}''',
 )
+substitute_entities = substitute_entites = xml_replace_entities  # for plugins that might use this
 
 
 def compile_pats(binary):
@@ -36,7 +41,6 @@ class LazyEncodingPats:
 
 
 lazy_encoding_pats = LazyEncodingPats()
-ENTITY_PATTERN = re.compile(r'&(\S+?);')
 
 
 def strip_encoding_declarations(raw, limit=50*1024, preserve_newlines=False):
@@ -96,26 +100,15 @@ def find_declared_encoding(raw, limit=50*1024):
                 return ans
 
 
-def substitute_entites(raw):
-    from calibre import xml_entity_to_unicode
-    return ENTITY_PATTERN.sub(xml_entity_to_unicode, raw)
-
-
-_CHARSET_ALIASES = {"macintosh" : "mac-roman", "x-sjis" : "shift-jis"}
+_CHARSET_ALIASES = {'macintosh': 'mac-roman', 'x-sjis': 'shift-jis', 'mac-centraleurope': 'cp1250'}
 
 
 def detect(bytestring):
     if isinstance(bytestring, str):
         bytestring = bytestring.encode('utf-8', 'replace')
-    try:
-        from calibre_extensions.uchardet import detect as implementation
-    except ImportError:
-        # People running from source without updated binaries
-        from cchardet import detect as cdi
-
-        def implementation(x):
-            return cdi(x).get('encoding') or ''
+    from calibre_extensions.uchardet import detect as implementation
     enc = implementation(bytestring).lower()
+    enc = _CHARSET_ALIASES.get(enc, enc)
     return {'encoding': enc, 'confidence': 1 if enc else 0}
 
 
@@ -196,6 +189,6 @@ def xml_to_unicode(raw, verbose=False, strip_encoding_pats=False,
     if strip_encoding_pats:
         raw = strip_encoding_declarations(raw)
     if resolve_entities:
-        raw = substitute_entites(raw)
+        raw = xml_replace_entities(raw)
 
     return raw, encoding

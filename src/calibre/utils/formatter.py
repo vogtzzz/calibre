@@ -20,9 +20,7 @@ from calibre import prints
 from calibre.constants import DEBUG
 from calibre.ebooks.metadata.book.base import field_metadata
 from calibre.utils.config import tweaks
-from calibre.utils.formatter_functions import (
-    StoredObjectType, formatter_functions, function_object_type, get_database,
-)
+from calibre.utils.formatter_functions import StoredObjectType, formatter_functions, function_object_type, get_database
 from calibre.utils.icu import strcmp
 from calibre.utils.localization import _
 from polyglot.builtins import error_message
@@ -61,6 +59,7 @@ class Node:
     NODE_RANGE = 30
     NODE_SWITCH = 31
     NODE_SWITCH_IF = 32
+    NODE_LIST_COUNT_FIELD = 33
 
     def __init__(self, line_number, name):
         self.my_line_number = line_number
@@ -333,6 +332,13 @@ class StrcatNode(Node):
         self.expression_list = expression_list
 
 
+class ListCountFieldNode(Node):
+    def __init__(self, line_number, expression):
+        Node.__init__(self, line_number, 'list_count_field()')
+        self.node_type = self.NODE_LIST_COUNT_FIELD
+        self.expression = expression
+
+
 class _Parser:
     LEX_OP = 1
     LEX_ID = 2
@@ -570,8 +576,8 @@ class _Parser:
         while not self.token_op_is(')'):
             a = self.top_expr()
             if a.node_type not in (Node.NODE_ASSIGN, Node.NODE_RVALUE):
-                self.error(_("Parameters to a function must be "
-                             "variables or assignments"))
+                self.error(_('Parameters to a function must be '
+                             'variables or assignments'))
             if a.node_type == Node.NODE_RVALUE:
                 a = AssignNode(line_number, a.name, ConstantNode(self.line_number, ''))
             arguments.append(a)
@@ -646,7 +652,7 @@ class _Parser:
     def compare_expr(self):
         left = self.add_subtract_expr()
         if (self.token_op_is_string_infix_compare() or
-                self.token_is('in') or self.token_is('inlist')):
+                self.token_is('in') or self.token_is('inlist') or self.token_is('inlist_field')):
             operator = self.token()
             return StringCompareNode(self.line_number, operator, left, self.add_subtract_expr())
         if self.token_op_is_numeric_infix_compare():
@@ -680,8 +686,8 @@ class _Parser:
         return self.expr()
 
     keyword_nodes = {
-            'if':       (lambda self:None, if_expression),
-            'for':      (lambda self:None, for_expression),
+            'if':       (lambda self: None, if_expression),
+            'for':      (lambda self: None, for_expression),
             'break':    (lambda self: self.consume(), lambda self: BreakNode(self.line_number)),
             'continue': (lambda self: self.consume(), lambda self: ContinueNode(self.line_number)),
             'return':   (lambda self: self.consume(), lambda self: ReturnNode(self.line_number, self.top_expr())),
@@ -711,7 +717,9 @@ class _Parser:
         'print':            (lambda _: True,
                              lambda ln, args: PrintNode(ln, args)),
         'strcat':           (lambda _: True,
-                             lambda ln, args: StrcatNode(ln, args))
+                             lambda ln, args: StrcatNode(ln, args)),
+        'list_count_field': (lambda args: len(args) == 1,
+                             lambda ln, args: ListCountFieldNode(ln, args[0]))
     }
 
     def expr(self):
@@ -761,7 +769,7 @@ class _Parser:
 
             # Eat the opening paren, parse the argument list, then eat the closing paren
             self.consume()
-            arguments = list()
+            arguments = []
             while not self.token_op_is(')'):
                 # parse an argument expression (recursive call)
                 arguments.append(self.expression_list())
@@ -845,7 +853,7 @@ class StopException(Exception):
         super().__init__('Template evaluation stopped')
 
 
-class PythonTemplateContext(object):
+class PythonTemplateContext:
 
     def __init__(self):
         # Set attributes we already know must exist.
@@ -870,11 +878,11 @@ class PythonTemplateContext(object):
     @property
     def attributes(self):
         # return a list of attributes in the context object
-        return sorted(list(self.attrs_set))
+        return sorted(self.attrs_set)
 
     def __str__(self):
         # return a string of the attribute with values separated by newlines
-        attrs = sorted(list(self.attrs_set))
+        attrs = sorted(self.attrs_set)
         ans = OrderedDict()
         for k in attrs:
             ans[k] = getattr(self, k, None)
@@ -953,7 +961,7 @@ class FormatterFuncsCaller:
 
             return call
 
-        e = AttributeError(_("No function named {!r} exists").format(name))
+        e = AttributeError(_('No function named {!r} exists').format(name))
         e.is_internal = True
         raise e
 
@@ -975,7 +983,7 @@ class _Interpreter:
         self.parent_book = parent.book
         self.funcs = funcs
         self.locals = {'$':val}
-        self.local_functions = dict()
+        self.local_functions = {}
         self.override_line_number = None
         self.global_vars = global_vars if isinstance(global_vars, dict) else {}
         if break_reporter:
@@ -987,7 +995,7 @@ class _Interpreter:
         try:
             if is_call:
                 # prog is an instance of the function definition class
-                ret =  self.do_node_stored_template_call(StoredTemplateCallNode(1, prog.name, prog, None), args=args)
+                ret = self.do_node_stored_template_call(StoredTemplateCallNode(1, prog.name, prog, None), args=args)
             else:
                 ret = self.expression_list(prog)
         except ReturnExecuted as e:
@@ -1066,20 +1074,20 @@ class _Interpreter:
             try:
                 start_val = int(self.float_deal_with_none(self.expr(prog.start_expr)))
             except ValueError:
-                self.error(_("{0}: {1} must be an integer").format('for', 'start'), line_number)
+                self.error(_('{0}: {1} must be an integer').format('for', 'start'), line_number)
             try:
                 stop_val = int(self.float_deal_with_none(self.expr(prog.stop_expr)))
             except ValueError:
-                self.error(_("{0}: {1} must be an integer").format('for', 'stop'), line_number)
+                self.error(_('{0}: {1} must be an integer').format('for', 'stop'), line_number)
             try:
                 step_val = int(self.float_deal_with_none(self.expr(prog.step_expr)))
             except ValueError:
-                self.error(_("{0}: {1} must be an integer").format('for', 'step'), line_number)
+                self.error(_('{0}: {1} must be an integer').format('for', 'step'), line_number)
             try:
                 limit_val = (1000 if prog.limit_expr is None else
                          int(self.float_deal_with_none(self.expr(prog.limit_expr))))
             except ValueError:
-                self.error(_("{0}: {1} must be an integer").format('for', 'limit'), line_number)
+                self.error(_('{0}: {1} must be an integer').format('for', 'limit'), line_number)
             var = prog.variable
             if (self.break_reporter):
                 self.break_reporter("'for': start value", str(start_val), line_number)
@@ -1091,7 +1099,7 @@ class _Interpreter:
                 range_gen = range(start_val, stop_val, step_val)
                 if len(range_gen) > limit_val:
                     self.error(
-                        _("{0}: the range length ({1}) is larger than the limit ({2})").format(
+                        _('{0}: the range length ({1}) is larger than the limit ({2})').format(
                             'for', str(len(range_gen)), str(limit_val)), line_number)
                 for x in (str(x) for x in range_gen):
                     try:
@@ -1120,7 +1128,7 @@ class _Interpreter:
             self.error(_("Unknown identifier '{0}'").format(prog.name), prog.line_number)
 
     def do_node_func(self, prog):
-        args = list()
+        args = []
         for arg in prog.expression_list:
             # evaluate the expression (recursive call)
             args.append(self.expr(arg))
@@ -1179,12 +1187,12 @@ class _Interpreter:
             self.break_reporter(prog.node_name, _('before evaluating arguments'), prog.line_number)
         line_number, argument_list, block  = self.local_functions[prog.name].attributes_to_tuple()
         if len(prog.arguments) > len(argument_list):
-            self.error(_("Function {0}: argument count mismatch -- "
-                         "{1} given, at most {2} required").format(prog.name,
+            self.error(_('Function {0}: argument count mismatch -- '
+                         '{1} given, at most {2} required').format(prog.name,
                                                           len(prog.arguments),
                                                           len(argument_list)),
                        prog.line_number)
-        new_locals = dict()
+        new_locals = {}
         for i,arg in enumerate(argument_list):
             if len(prog.arguments) > i:
                 new_locals[arg.left] = self.expr(prog.arguments[i])
@@ -1322,15 +1330,15 @@ class _Interpreter:
         for i in range(0, len(prog.expression_list)-1, 2):
             tst = self.expr(prog.expression_list[i])
             if self.break_reporter:
-                self.break_reporter("switch_if(): test expr", tst, prog.line_number)
+                self.break_reporter('switch_if(): test expr', tst, prog.line_number)
             if tst:
                 res = self.expr(prog.expression_list[i+1])
                 if self.break_reporter:
-                    self.break_reporter("switch_if(): value expr", res, prog.line_number)
+                    self.break_reporter('switch_if(): value expr', res, prog.line_number)
                 return res
         res = self.expr(prog.expression_list[-1])
         if (self.break_reporter):
-            self.break_reporter("switch_if(): default expr", res, prog.line_number)
+            self.break_reporter('switch_if(): default expr', res, prog.line_number)
         return res
 
     def do_node_strcat(self, prog):
@@ -1338,6 +1346,16 @@ class _Interpreter:
         if self.break_reporter:
             self.break_reporter(prog.node_name, res, prog.line_number)
         return res
+
+    def do_node_list_count_field(self, prog):
+        name = field_metadata.search_term_to_field_key(self.expr(prog.expression))
+        res = getattr(self.parent_book, name, None)
+        if res is None or not isinstance(res, (list, tuple, set, dict)):
+            self.error(_("Field '{0}' is either not a field or not a list").format(name), prog.line_number)
+        ans = str(len(res))
+        if self.break_reporter:
+            self.break_reporter(prog.node_name, ans, prog.line_number)
+        return ans
 
     def do_node_break(self, prog):
         if (self.break_reporter):
@@ -1369,22 +1387,43 @@ class _Interpreter:
         return res
 
     INFIX_STRING_COMPARE_OPS = {
-        "==": lambda x, y: strcmp(x, y) == 0,
-        "!=": lambda x, y: strcmp(x, y) != 0,
-        "<": lambda x, y: strcmp(x, y) < 0,
-        "<=": lambda x, y: strcmp(x, y) <= 0,
-        ">": lambda x, y: strcmp(x, y) > 0,
-        ">=": lambda x, y: strcmp(x, y) >= 0,
-        "in": lambda x, y: re.search(x, y, flags=re.I),
-        "inlist": lambda x, y: list(filter(partial(re.search, x, flags=re.I),
+        '==': lambda x, y: strcmp(x, y) == 0,
+        '!=': lambda x, y: strcmp(x, y) != 0,
+        '<': lambda x, y: strcmp(x, y) < 0,
+        '<=': lambda x, y: strcmp(x, y) <= 0,
+        '>': lambda x, y: strcmp(x, y) > 0,
+        '>=': lambda x, y: strcmp(x, y) >= 0,
+        'in': lambda x, y: re.search(x, y, flags=re.I),
+        'inlist': lambda x, y: list(filter(partial(re.search, x, flags=re.I),
                                            [v.strip() for v in y.split(',') if v.strip()]))
         }
+
+    def do_inlist_field(self, left, right, prog):
+        res = getattr(self.parent_book, right, None)
+        if res is None or not isinstance(res, (list, tuple, set, dict)):
+            self.error(_("Field '{0}' is either not a field or not a list").format(right), prog.line_number)
+        pat = re.compile(left, flags=re.I)
+        if isinstance(res, dict):  # identifiers
+            for k,v in res.items():
+                if re.search(pat, f'{k}:{v}'):
+                    return '1'
+        else:
+            for v in res:
+                if re.search(pat, v):
+                    return '1'
+        return ''
 
     def do_node_string_infix(self, prog):
         try:
             left = self.expr(prog.left)
             right = self.expr(prog.right)
-            res = '1' if self.INFIX_STRING_COMPARE_OPS[prog.operator](left, right) else ''
+            try:
+                res = '1' if self.INFIX_STRING_COMPARE_OPS[prog.operator](left, right) else ''
+            except KeyError:
+                if prog.operator == 'inlist_field':
+                    res = self.do_inlist_field(left, right, prog)
+                else:
+                    raise
             if (self.break_reporter):
                 self.break_reporter(prog.node_name, res, prog.line_number)
             return res
@@ -1395,12 +1434,12 @@ class _Interpreter:
                          "operator '{0}'").format(prog.operator), prog.line_number)
 
     INFIX_NUMERIC_COMPARE_OPS = {
-        "==#": lambda x, y: x == y,
-        "!=#": lambda x, y: x != y,
-        "<#": lambda x, y: x < y,
-        "<=#": lambda x, y: x <= y,
-        ">#": lambda x, y: x > y,
-        ">=#": lambda x, y: x >= y,
+        '==#': lambda x, y: x == y,
+        '!=#': lambda x, y: x != y,
+        '<#': lambda x, y: x < y,
+        '<=#': lambda x, y: x <= y,
+        '>#': lambda x, y: x > y,
+        '>=#': lambda x, y: x >= y,
         }
 
     def float_deal_with_none(self, v):
@@ -1568,6 +1607,7 @@ class _Interpreter:
         Node.NODE_BINARY_STRINGOP:       do_node_stringops,
         Node.NODE_LOCAL_FUNCTION_DEFINE: do_node_local_function_define,
         Node.NODE_LOCAL_FUNCTION_CALL:   do_node_local_function_call,
+        Node.NODE_LIST_COUNT_FIELD:      do_node_list_count_field,
         }
 
     def expr(self, prog):
@@ -1611,6 +1651,7 @@ class TemplateFormatter(string.Formatter):
         self.recursion_level = -1
         self._caller = None
         self.python_context_object = None
+        self.database = None
 
     def _do_format(self, val, fmt):
         if not fmt or not val:
@@ -1658,23 +1699,24 @@ class TemplateFormatter(string.Formatter):
     # ################# Template language lexical analyzer ######################
 
     lex_scanner = re.Scanner([
-            (r'(==#|!=#|<=#|<#|>=#|>#)', lambda x,t: (_Parser.LEX_NUMERIC_INFIX, t)),  # noqa
-            (r'(==|!=|<=|<|>=|>)',       lambda x,t: (_Parser.LEX_STRING_INFIX, t)),  # noqa
-            (r'(if|then|else|elif|fi)\b',lambda x,t: (_Parser.LEX_KEYWORD, t)),  # noqa
-            (r'(for|in|rof|separator)\b',lambda x,t: (_Parser.LEX_KEYWORD, t)),  # noqa
-            (r'(separator|limit)\b',     lambda x,t: (_Parser.LEX_KEYWORD, t)),  # noqa
-            (r'(def|fed|continue)\b',    lambda x,t: (_Parser.LEX_KEYWORD, t)),  # noqa
-            (r'(return|inlist|break)\b', lambda x,t: (_Parser.LEX_KEYWORD, t)),  # noqa
-            (r'(\|\||&&|!|{|})',         lambda x,t: (_Parser.LEX_OP, t)),  # noqa
-            (r'[(),=;:\+\-*/&]',         lambda x,t: (_Parser.LEX_OP, t)),  # noqa
-            (r'-?[\d\.]+',               lambda x,t: (_Parser.LEX_CONST, t)),  # noqa
-            (r'\$\$?#?\w+',              lambda x,t: (_Parser.LEX_ID, t)),  # noqa
-            (r'\$',                      lambda x,t: (_Parser.LEX_ID, t)),  # noqa
-            (r'\w+',                     lambda x,t: (_Parser.LEX_ID, t)),  # noqa
-            (r'".*?((?<!\\)")',          lambda x,t: (_Parser.LEX_CONST, t[1:-1])),  # noqa
-            (r'\'.*?((?<!\\)\')',        lambda x,t: (_Parser.LEX_CONST, t[1:-1])),  # noqa
-            (r'\n#.*?(?:(?=\n)|$)',      lambda x,t: _Parser.LEX_NEWLINE),  # noqa
-            (r'\s',                      lambda x,t: _Parser.LEX_NEWLINE if t == '\n' else None),  # noqa
+            (r'(==#|!=#|<=#|<#|>=#|>#)', lambda x,t: (_Parser.LEX_NUMERIC_INFIX, t)),
+            (r'(==|!=|<=|<|>=|>)',       lambda x,t: (_Parser.LEX_STRING_INFIX, t)),
+            (r'(if|then|else|elif|fi)\b',lambda x,t: (_Parser.LEX_KEYWORD, t)),
+            (r'(for|in|rof|separator)\b',lambda x,t: (_Parser.LEX_KEYWORD, t)),
+            (r'(separator|limit)\b',     lambda x,t: (_Parser.LEX_KEYWORD, t)),
+            (r'(def|fed|continue)\b',    lambda x,t: (_Parser.LEX_KEYWORD, t)),
+            (r'(return|inlist|break)\b', lambda x,t: (_Parser.LEX_KEYWORD, t)),
+            (r'(inlist_field)\b',        lambda x,t: (_Parser.LEX_KEYWORD, t)),
+            (r'(\|\||&&|!|{|})',         lambda x,t: (_Parser.LEX_OP, t)),
+            (r'[(),=;:\+\-*/&]',         lambda x,t: (_Parser.LEX_OP, t)),
+            (r'-?[\d\.]+',               lambda x,t: (_Parser.LEX_CONST, t)),
+            (r'\$\$?#?\w+',              lambda x,t: (_Parser.LEX_ID, t)),
+            (r'\$',                      lambda x,t: (_Parser.LEX_ID, t)),
+            (r'\w+',                     lambda x,t: (_Parser.LEX_ID, t)),
+            (r'".*?((?<!\\)")',          lambda x,t: (_Parser.LEX_CONST, t[1:-1])),
+            (r'\'.*?((?<!\\)\')',        lambda x,t: (_Parser.LEX_CONST, t[1:-1])),
+            (r'\n#.*?(?:(?=\n)|$)',      lambda x,t: _Parser.LEX_NEWLINE),
+            (r'\s',                      lambda x,t: _Parser.LEX_NEWLINE if t == '\n' else None),
         ], flags=re.DOTALL)
 
     def _eval_program(self, val, prog, column_name, global_vars, break_reporter):
@@ -1717,8 +1759,10 @@ class TemplateFormatter(string.Formatter):
 
     def _run_python_template(self, compiled_template, arguments):
         try:
+            db = get_database(self.book, None)
+            db = db if db is not None else self.database
             self.python_context_object.set_values(
-                         db=get_database(self.book, get_database(self.book, None)),
+                         db=db,
                          globals=self.global_vars,
                          arguments=arguments,
                          formatter=self,
@@ -1760,7 +1804,7 @@ class TemplateFormatter(string.Formatter):
             raise ValueError(
                 _('Syntax error on line {0} column {1}: text {2}').format(e.lineno, e.offset, e.text))
         except KeyError:
-            raise ValueError(_("The {0} function is not defined in the template").format('evaluate'))
+            raise ValueError(_('The {0} function is not defined in the template').format('evaluate'))
 
     # ################# Override parent classes methods #####################
 
@@ -1779,13 +1823,13 @@ class TemplateFormatter(string.Formatter):
 
         # Handle functions
         # First see if we have a functional-style expression
-        if fmt.startswith('\''):
+        if fmt.startswith("'"):
             p = 0
         else:
-            p = fmt.find(':\'')
+            p = fmt.find(":'")
             if p >= 0:
                 p += 1
-        if p >= 0 and fmt[-1] == '\'':
+        if p >= 0 and fmt[-1] == "'":
             val = self._eval_program(val, fmt[p+1:-1], None, self.global_vars, None)
             colon = fmt[0:p].find(':')
             if colon < 0:
@@ -1873,7 +1917,8 @@ class TemplateFormatter(string.Formatter):
              self.funcs,
              self.locals,
              self._caller,
-             self.python_context_object))
+             self.python_context_object,
+             self.database))
 
     def restore_state(self, state):
         self.recursion_level -= 1
@@ -1888,7 +1933,8 @@ class TemplateFormatter(string.Formatter):
          self.funcs,
          self.locals,
          self._caller,
-         self.python_context_object) = state
+         self.python_context_object,
+         self.database) = state
 
     # Allocate an interpreter if the formatter encounters a GPM or TPM template.
     # We need to allocate additional interpreters if there is composite recursion
@@ -1939,12 +1985,13 @@ class TemplateFormatter(string.Formatter):
                     column_name=None, template_cache=None,
                     strip_results=True, template_functions=None,
                     global_vars=None, break_reporter=None,
-                    python_context_object=None):
+                    python_context_object=None, database=None):
         state = self.save_state()
         if self.recursion_level == 0:
-            # Initialize the composite values dict if this is the base-level
-            # call. Recursive calls will use the same dict.
+            # Initialize the composite values dict and database if this is the
+            # base-level call. Recursive calls will use the same dict.
             self.composite_values = {}
+            self.database = database
         try:
             self._caller = FormatterFuncsCaller(self)
             self.strip_results = strip_results

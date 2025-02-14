@@ -4,7 +4,10 @@
 __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import sys, os, errno, select
+import errno
+import os
+import select
+import sys
 
 
 class INotifyError(Exception):
@@ -44,27 +47,27 @@ def load_inotify():  # {{{
         if not hasattr(ctypes, 'c_ssize_t'):
             raise INotifyError('You need python >= 2.7 to use inotify')
         libc = ctypes.CDLL(None, use_errno=True)
-        for function in ("inotify_add_watch", "inotify_init1", "inotify_rm_watch"):
+        for function in ('inotify_add_watch', 'inotify_init1', 'inotify_rm_watch'):
             if not hasattr(libc, function):
                 raise INotifyError('libc is too old')
         # inotify_init1()
         prototype = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int, use_errno=True)
-        init1 = prototype(('inotify_init1', libc), ((1, "flags", 0),))
+        init1 = prototype(('inotify_init1', libc), ((1, 'flags', 0),))
 
         # inotify_add_watch()
         prototype = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32, use_errno=True)
         add_watch = prototype(('inotify_add_watch', libc), (
-            (1, "fd"), (1, "pathname"), (1, "mask")), use_errno=True)
+            (1, 'fd'), (1, 'pathname'), (1, 'mask')), use_errno=True)
 
         # inotify_rm_watch()
         prototype = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int, ctypes.c_int, use_errno=True)
         rm_watch = prototype(('inotify_rm_watch', libc), (
-            (1, "fd"), (1, "wd")), use_errno=True)
+            (1, 'fd'), (1, 'wd')), use_errno=True)
 
         # read()
         prototype = ctypes.CFUNCTYPE(ctypes.c_ssize_t, ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t, use_errno=True)
         read = prototype(('read', libc), (
-            (1, "fd"), (1, "buf"), (1, "count")), use_errno=True)
+            (1, 'fd'), (1, 'buf'), (1, 'count')), use_errno=True)
         _inotify = (init1, add_watch, rm_watch, read)
     return _inotify
 # }}}
@@ -115,7 +118,8 @@ class INotify:
     NONBLOCK = 0x800
 
     def __init__(self, cloexec=True, nonblock=True):
-        import ctypes, struct
+        import ctypes
+        import struct
         self._init1, self._add_watch, self._rm_watch, self._read = load_inotify()
         flags = 0
         if cloexec:
@@ -311,7 +315,7 @@ class INotifyTreeWatcher(INotify):
                     else:
                         raise
             if (mask & self.DELETE_SELF or mask & self.MOVE_SELF) and path == self.basedir:
-                raise BaseDirChanged('The directory %s was moved/deleted' % path)
+                raise BaseDirChanged(f'The directory {path} was moved/deleted')
 
     def __call__(self):
         self.read()

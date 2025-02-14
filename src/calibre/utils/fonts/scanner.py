@@ -10,11 +10,10 @@ from collections import defaultdict
 from threading import Thread
 
 from calibre import as_unicode, prints, walk
-from calibre.constants import (
-    DEBUG, config_dir, filesystem_encoding, ismacos, iswindows, isworker,
-)
+from calibre.constants import DEBUG, config_dir, filesystem_encoding, ismacos, iswindows, isworker
 from calibre.utils.fonts.metadata import FontMetadata, UnsupportedFont
-from calibre.utils.icu import lower as icu_lower, sort_key
+from calibre.utils.icu import lower as icu_lower
+from calibre.utils.icu import sort_key
 from calibre.utils.resources import get_path as P
 from polyglot.builtins import itervalues
 
@@ -22,8 +21,8 @@ from polyglot.builtins import itervalues
 class NoFonts(ValueError):
     pass
 
-# Font dirs {{{
 
+# Font dirs {{{
 
 def default_font_dirs():
     return [
@@ -77,7 +76,7 @@ def fc_list():
             try:
                 ans.append(d.decode(filesystem_encoding))
             except ValueError:
-                prints('Ignoring undecodeable font path: %r' % d)
+                prints(f'Ignoring undecodeable font path: {d!r}')
                 continue
     end(str_list)
     if len(ans) < 3:
@@ -124,8 +123,8 @@ def font_dirs():
     return fc_list()
 # }}}
 
-# Build font family maps {{{
 
+# Build font family maps {{{
 
 def font_priority(font):
     '''
@@ -200,7 +199,7 @@ class FontScanner(Thread):
     CACHE_VERSION = 2
 
     def __init__(self, folders=[], allowed_extensions={'ttf', 'otf'}):
-        Thread.__init__(self)
+        super().__init__(daemon=True)
         self.folders = folders + font_dirs() + [os.path.join(config_dir, 'fonts'),
                 P('fonts/liberation')]
         self.folders = [os.path.normcase(os.path.abspath(f)) for f in
@@ -225,7 +224,7 @@ class FontScanner(Thread):
         try:
             return self.font_family_map[icu_lower(family)]
         except KeyError:
-            raise NoFonts('No fonts found for the family: %r'%family)
+            raise NoFonts(f'No fonts found for the family: {family!r}')
 
     def legacy_fonts_for_family(self, family):
         '''
@@ -269,11 +268,9 @@ class FontScanner(Thread):
 
         :return: (family name, faces) or None, None
         '''
-        from calibre.utils.fonts.utils import (
-            get_printable_characters, panose_to_css_generic_family, supports_text,
-        )
+        from calibre.utils.fonts.utils import get_printable_characters, panose_to_css_generic_family, supports_text
         if not isinstance(text, str):
-            raise TypeError('%r is not unicode'%text)
+            raise TypeError(f'{text!r} is not unicode')
         text = get_printable_characters(text)
         found = {}
 
@@ -291,7 +288,7 @@ class FontScanner(Thread):
                 continue
             generic_family = panose_to_css_generic_family(faces[0]['panose'])
             if generic_family in allowed_families or generic_family == preferred_families[0]:
-                return (family, faces)
+                return family, faces
             elif generic_family not in found:
                 found[generic_family] = (family, faces)
 
@@ -368,6 +365,7 @@ class FontScanner(Thread):
         self.font_family_map, self.font_families = build_families(self.cached_fonts, self.folders)
 
     def write_cache(self):
+        # writing to the cache is atomic thanks to JSONConfig
         with self.cache:
             self.cache['version'] = self.CACHE_VERSION
             self.cache['fonts'] = self.cached_fonts
@@ -392,10 +390,10 @@ class FontScanner(Thread):
         for family in self.font_families:
             prints(family)
             for font in self.fonts_for_family(family):
-                prints('\t%s: %s'%(font['full_name'], font['path']))
+                prints('\t{}: {}'.format(font['full_name'], font['path']))
                 prints(end='\t')
                 for key in ('font-stretch', 'font-weight', 'font-style'):
-                    prints('%s: %s'%(key, font[key]), end=' ')
+                    prints(f'{key}: {font[key]}', end=' ')
                 prints()
                 prints('\tSub-family:', font['wws_subfamily_name'] or
                         font['preferred_subfamily_name'] or

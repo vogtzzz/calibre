@@ -14,7 +14,6 @@ except ImportError:
 from contextlib import closing
 
 from lxml import html
-
 from qt.core import QUrl
 
 from calibre import browser
@@ -72,5 +71,5 @@ class BeamEBooksDEStore(BasicStoreConfig, StorePlugin):
                 s.price = price
                 s.drm = SearchResult.DRM_UNLOCKED
                 s.detail_item = id_
-#                 s.formats = None
+                # s.formats = None
                 yield s

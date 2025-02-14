@@ -8,36 +8,43 @@ import sys
 import time
 from collections import defaultdict, namedtuple
 from hashlib import sha256
+from threading import Thread
+
 from qt.core import (
-    QApplication, QCursor, QDockWidget, QEvent, QMainWindow, QMenu, QMimeData,
-    QModelIndex, QPixmap, Qt, QTimer, QToolBar, QUrl, QVBoxLayout, QWidget, pyqtSignal,
+    QApplication,
+    QCursor,
+    QDockWidget,
+    QEvent,
+    QMainWindow,
+    QMenu,
+    QMimeData,
+    QModelIndex,
+    QPixmap,
+    Qt,
+    QTimer,
+    QToolBar,
+    QUrl,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
     sip,
 )
-from threading import Thread
 
 from calibre import prints
 from calibre.constants import ismacos, iswindows
 from calibre.customize.ui import available_input_formats
 from calibre.db.annotations import merge_annotations
-from calibre.gui2 import (
-    add_to_recent_docs, choose_files, error_dialog, sanitize_env_vars,
-)
+from calibre.gui2 import add_to_recent_docs, choose_files, error_dialog, sanitize_env_vars
 from calibre.gui2.dialogs.drm_error import DRMErrorMessage
 from calibre.gui2.image_popup import ImagePopup
 from calibre.gui2.main_window import MainWindow
-from calibre.gui2.viewer import get_current_book_data, performance_monitor
-from calibre.gui2.viewer.annotations import (
-    AnnotationsSaveWorker, annotations_dir, parse_annotations,
-)
+from calibre.gui2.viewer import get_boss, get_current_book_data, performance_monitor
+from calibre.gui2.viewer.annotations import AnnotationsSaveWorker, annotations_dir, parse_annotations
 from calibre.gui2.viewer.bookmarks import BookmarkManager
-from calibre.gui2.viewer.config import (
-    get_session_pref, load_reading_rates, save_reading_rates, vprefs,
-)
+from calibre.gui2.viewer.config import get_session_pref, load_reading_rates, save_reading_rates, vprefs
 from calibre.gui2.viewer.convert_book import clean_running_workers, prepare_book
 from calibre.gui2.viewer.highlights import HighlightsPanel
-from calibre.gui2.viewer.integration import (
-    get_book_library_details, load_annotations_map_from_library,
-)
+from calibre.gui2.viewer.integration import get_book_library_details, load_annotations_map_from_library
 from calibre.gui2.viewer.lookup import Lookup
 from calibre.gui2.viewer.overlay import LoadingOverlay
 from calibre.gui2.viewer.search import SearchPanel
@@ -68,8 +75,8 @@ def dock_defs():
     def d(title, name, area, allowed=Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea):
         ans[name] = Dock(name + '-dock', title, area, allowed)
 
-    d(_('Table of Contents'), 'toc', Qt.DockWidgetArea.LeftDockWidgetArea),
-    d(_('Lookup'), 'lookup', Qt.DockWidgetArea.RightDockWidgetArea),
+    d(_('Table of Contents'), 'toc', Qt.DockWidgetArea.LeftDockWidgetArea)
+    d(_('Lookup'), 'lookup', Qt.DockWidgetArea.RightDockWidgetArea)
     d(_('Bookmarks'), 'bookmarks', Qt.DockWidgetArea.RightDockWidgetArea)
     d(_('Search'), 'search', Qt.DockWidgetArea.LeftDockWidgetArea)
     d(_('Inspector'), 'inspector', Qt.DockWidgetArea.RightDockWidgetArea, Qt.DockWidgetArea.AllDockWidgetAreas)
@@ -90,6 +97,7 @@ class EbookViewer(MainWindow):
 
     def __init__(self, open_at=None, continue_reading=None, force_reload=False, calibre_book_data=None):
         MainWindow.__init__(self, None)
+        get_boss(self)
         self.annotations_saver = None
         self.calibre_book_data_for_first_book = calibre_book_data
         self.shutting_down = self.close_forced = self.shutdown_done = False
@@ -171,7 +179,7 @@ class EbookViewer(MainWindow):
         self.web_view.toggle_toc.connect(self.toggle_toc)
         self.web_view.show_search.connect(self.show_search)
         self.web_view.find_next.connect(self.search_widget.find_next_requested)
-        self.search_widget.show_search_result.connect(self.web_view.show_search_result)
+        self.search_widget.show_search_result.connect(self.show_search_result)
         self.web_view.search_result_not_found.connect(self.search_widget.search_result_not_found)
         self.web_view.search_result_discovered.connect(self.search_widget.search_result_discovered)
         self.web_view.toggle_bookmarks.connect(self.toggle_bookmarks)
@@ -271,7 +279,7 @@ class EbookViewer(MainWindow):
             print(err, file=sys.stderr)
             return
         self.load_ebook(path, open_at=open_at)
-        self.raise_()
+        self.raise_and_focus()
         self.activateWindow()
     # }}}
 
@@ -314,10 +322,13 @@ class EbookViewer(MainWindow):
         if not is_visible:
             self.toc.scroll_to_current_toc_node()
 
+    def show_search_result(self, sr):
+        self.web_view.show_search_result(sr)
+
     def show_search(self, text, trigger=False, search_type=None, case_sensitive=None):
         self.search_dock.setVisible(True)
         self.search_dock.activateWindow()
-        self.search_dock.raise_()
+        self.search_dock.raise_and_focus()
         self.search_widget.focus_input(text, search_type, case_sensitive)
         if trigger:
             self.search_widget.trigger()
@@ -364,7 +375,16 @@ class EbookViewer(MainWindow):
         if force_show and self.lookup_dock.isVisible():
             self.lookup_widget.on_forced_show()
 
+    def check_for_read_aloud(self, where: str):
+        if self.actions_toolbar.toggle_read_aloud_action.isChecked():
+            error_dialog(self, _('Cannot jump to location'), _(
+                'The Read aloud feature is active, cannot jump to {}. Close it first.').format(where), show=True)
+            return True
+        return False
+
     def toc_clicked(self, index):
+        if self.check_for_read_aloud(_('Table of Contents locations')):
+            return
         item = self.toc_model.itemFromIndex(index)
         self.web_view.goto_toc_node(item.node_id)
         self.force_focus_on_web_view()
@@ -386,6 +406,8 @@ class EbookViewer(MainWindow):
         self.web_view.goto_cfi(cfi, add_to_history=add_to_history)
 
     def bookmark_activated(self, cfi):
+        if self.check_for_read_aloud(_('bookmark')):
+            return
         self.goto_cfi(cfi, add_to_history=True)
 
     def view_image(self, name):
@@ -398,21 +420,21 @@ class EbookViewer(MainWindow):
                 self.image_popup()
             else:
                 error_dialog(self, _('Invalid image'), _(
-                    "Failed to load the image {}").format(name), show=True)
+                    'Failed to load the image {}').format(name), show=True)
         else:
             error_dialog(self, _('Image not found'), _(
-                    "Failed to find the image {}").format(name), show=True)
+                    'Failed to find the image {}').format(name), show=True)
 
     def copy_image(self, name):
         path = get_path_for_name(name)
         if not path:
             return error_dialog(self, _('Image not found'), _(
-                "Failed to find the image {}").format(name), show=True)
+                'Failed to find the image {}').format(name), show=True)
         try:
             img = image_from_path(path)
         except Exception:
             return error_dialog(self, _('Invalid image'), _(
-                "Failed to load the image {}").format(name), show=True)
+                'Failed to load the image {}').format(name), show=True)
         url = QUrl.fromLocalFile(path)
         md = QMimeData()
         md.setImageData(img)
@@ -535,6 +557,7 @@ class EbookViewer(MainWindow):
                 self.book_prepared.emit(True, {'base': ans, 'pathtoebook': pathtoebook, 'open_at': open_at, 'reloaded': reload_book})
 
     def prepare_notify(self):
+        performance_monitor('preparation started')
         self.book_preparation_started.emit()
 
     def load_finished(self, ok, data):
@@ -748,7 +771,8 @@ class EbookViewer(MainWindow):
             exe = os.path.join(macos_edit_book_bundle_path(), exe)
         else:
             exe = exe_path(exe)
-        cmd = [exe]
+
+        cmd = [exe] if isinstance(exe, str) else list(exe)
         if selected_text:
             cmd += ['--select-text', selected_text]
         from calibre.gui2.widgets import BusyCursor
@@ -815,7 +839,7 @@ class EbookViewer(MainWindow):
         return MainWindow.closeEvent(self, ev)
     # }}}
 
-    # Auto-hide mouse cursor  {{{
+    # Auto-hide mouse cursor {{{
     def setup_mouse_auto_hide(self):
         QApplication.instance().installEventFilter(self)
         self.cursor_hidden = False

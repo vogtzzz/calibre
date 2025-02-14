@@ -6,11 +6,12 @@ __copyright__ = '2012, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
 import weakref
-from functools import wraps
 from collections.abc import MutableMapping, MutableSequence
 from copy import deepcopy
+from functools import wraps
 
-from calibre.ebooks.metadata.book.base import Metadata, SIMPLE_GET, TOP_LEVEL_IDENTIFIERS, NULL_VALUES, ALL_METADATA_FIELDS
+from calibre.ebooks.metadata.book import STANDARD_METADATA_FIELDS
+from calibre.ebooks.metadata.book.base import ALL_METADATA_FIELDS, NULL_VALUES, SIMPLE_GET, TOP_LEVEL_IDENTIFIERS, Metadata
 from calibre.ebooks.metadata.book.formatter import SafeFormat
 from calibre.utils.date import utcnow
 from polyglot.builtins import native_string_type
@@ -262,7 +263,7 @@ def composite_getter(mi, field, dbref, book_id, cache, formatter, template_cache
         except Exception:
             import traceback
             traceback.print_exc()
-            return 'ERROR WHILE EVALUATING: %s' % field
+            return f'ERROR WHILE EVALUATING: {field}'
         return ret
 
 
@@ -364,7 +365,7 @@ class ProxyMetadata(Metadata):
         try:
             return ga(self, '_cache')[field]
         except KeyError:
-            raise AttributeError('Metadata object has no attribute named: %r' % field)
+            raise AttributeError(f'Metadata object has no attribute named: {field!r}')
 
     def __setattr__(self, field, val, extra=None):
         cache = ga(self, '_cache')
@@ -383,11 +384,11 @@ class ProxyMetadata(Metadata):
     # compatibility, flag __iter__ as unimplemented. This won't break anything
     # because the Metadata version raises AttributeError
     def __iter__(self):
-        raise NotImplementedError("__iter__() cannot be used in this context. "
-                                   "Use the explicit methods such as all_field_keys()")
+        raise NotImplementedError('__iter__() cannot be used in this context. '
+                                   'Use the explicit methods such as all_field_keys()')
 
     def has_key(self, key):
-        return key in self.all_field_keys()
+        return key in STANDARD_METADATA_FIELDS or key in ga(self, '_user_metadata')
 
     def deepcopy(self, **kwargs):
         self._unimplemented_exception('deepcopy', add_txt=False)

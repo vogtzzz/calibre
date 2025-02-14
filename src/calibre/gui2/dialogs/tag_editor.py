@@ -1,9 +1,7 @@
 __license__   = 'GPL v3'
 __copyright__ = '2008, Kovid Goyal <kovid at kovidgoyal.net>'
 
-from qt.core import (
-    QAbstractItemView, QDialog, QSortFilterProxyModel, QStringListModel, Qt,
-)
+from qt.core import QAbstractItemView, QDialog, QSortFilterProxyModel, QStringListModel, Qt
 
 from calibre.constants import islinux
 from calibre.gui2 import error_dialog, gprefs, question_dialog
@@ -77,9 +75,9 @@ class TagEditor(QDialog, Ui_TagEditor):
             self.applied_tags.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
 
         if key:
-            all_tags = [tag for tag in self.db.all_custom(label=key)]
+            all_tags = list(self.db.all_custom(label=key))
         else:
-            all_tags = [tag for tag in self.db.all_tags()]
+            all_tags = list(self.db.all_tags())
         all_tags = sorted(set(all_tags) - set(tags), key=sort_key)
         self.all_tags_model = QStringListModel(all_tags)
         p = QSortFilterProxyModel()

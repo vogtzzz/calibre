@@ -5,9 +5,22 @@ __license__ = 'GPL v3'
 __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 
 import sys
+
 from qt.core import (
-    QApplication, QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QIcon,
-    QInputDialog, QLabel, QMainWindow, QMenu, QSize, QSpinBox, Qt, QToolButton,
+    QApplication,
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QIcon,
+    QInputDialog,
+    QLabel,
+    QMainWindow,
+    QMenu,
+    QSize,
+    QSpinBox,
+    Qt,
+    QToolButton,
     pyqtSignal,
 )
 
@@ -252,11 +265,11 @@ class Editor(QMainWindow):
         self.action_bar = b = self.addToolBar(_('File actions tool bar'))
         b.setObjectName('action_bar')  # Needed for saveState
         for x in ('undo', 'redo'):
-            b.addAction(getattr(self.canvas, '%s_action' % x))
+            b.addAction(getattr(self.canvas, f'{x}_action'))
         self.edit_bar = b = self.addToolBar(_('Edit actions tool bar'))
         b.setObjectName('edit-actions-bar')
         for x in ('copy', 'paste'):
-            ac = actions['editor-%s' % x]
+            ac = actions[f'editor-{x}']
             setattr(self, 'action_' + x, b.addAction(ac.icon(), x, getattr(self, x)))
         self.update_clipboard_actions()
 

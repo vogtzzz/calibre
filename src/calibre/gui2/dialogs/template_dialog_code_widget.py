@@ -7,10 +7,7 @@ Based on classes in calibre.gui2.tweak_book.editor
 License: GPLv3 Copyright: 2021, Kovid Goyal <kovid at kovidgoyal.net>
 '''
 
-from qt.core import (
-    QFont, QPainter, QPalette, QPlainTextEdit, QRect, Qt, QTextEdit,
-    QTextFormat, QTextCursor
-)
+from qt.core import QFont, QPainter, QPalette, QPlainTextEdit, QRect, Qt, QTextCursor, QTextEdit, QTextFormat
 
 from calibre.gui2.tweak_book.editor.text import LineNumbers
 from calibre.gui2.tweak_book.editor.themes import get_theme, theme_color
@@ -62,7 +59,7 @@ class CodeEditor(QPlainTextEdit):
     def line_number_area_width(self):
         # get largest width of digits
         fm = self.fontMetrics()
-        self.number_width = max(map(lambda x:fm.horizontalAdvance(str(x)), range(10)))
+        self.number_width = max(fm.horizontalAdvance(str(x)) for x in range(10))
         digits = 1
         limit = max(1, self.blockCount())
         while limit >= 10:

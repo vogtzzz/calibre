@@ -5,12 +5,14 @@ __copyright__ = '2008, Kovid Goyal <kovid at kovidgoyal.net>'
 '''
 Builtin recipes.
 '''
-import re, time, io
-from calibre.web.feeds.news import (BasicNewsRecipe, CustomIndexRecipe,
-    AutomaticNewsRecipe, CalibrePeriodical)
+import io
+import re
+import time
+
 from calibre.ebooks.BeautifulSoup import BeautifulSoup
 from calibre.utils.config import JSONConfig
-from polyglot.builtins import itervalues, codepoint_to_chr
+from calibre.web.feeds.news import AutomaticNewsRecipe, BasicNewsRecipe, CalibrePeriodical, CustomIndexRecipe
+from polyglot.builtins import codepoint_to_chr, itervalues
 
 basic_recipes = (BasicNewsRecipe, AutomaticNewsRecipe, CustomIndexRecipe,
         CalibrePeriodical)
@@ -21,7 +23,7 @@ custom_recipes = JSONConfig('custom_recipes/index.json')
 def custom_recipe_filename(id_, title):
     from calibre.utils.filenames import ascii_filename
     return ascii_filename(title[:50]) + \
-                        ('_%s.recipe'%id_)
+                        (f'_{id_}.recipe')
 
 
 def compile_recipe(src):

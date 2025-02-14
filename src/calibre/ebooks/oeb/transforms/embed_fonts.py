@@ -11,11 +11,11 @@ import css_parser
 from lxml import etree
 
 from calibre import guess_type
-from calibre.ebooks.oeb.base import XPath, CSS_MIME, XHTML
-from calibre.ebooks.oeb.transforms.subset import get_font_properties, find_font_face_rules, elem_style
-from calibre.utils.filenames import ascii_filename
-from calibre.utils.fonts.scanner import font_scanner, NoFonts
+from calibre.ebooks.oeb.base import CSS_MIME, XHTML, XPath
 from calibre.ebooks.oeb.polish.embed import font_key
+from calibre.ebooks.oeb.transforms.subset import elem_style, find_font_face_rules, get_font_properties
+from calibre.utils.filenames import ascii_filename
+from calibre.utils.fonts.scanner import NoFonts, font_scanner
 from polyglot.builtins import iteritems
 
 
@@ -86,7 +86,6 @@ def used_font(style, embedded_fonts):
 
 
 class EmbedFonts:
-
     '''
     Embed all referenced fonts, if found on system. Must be called after CSS flattening.
     '''
@@ -204,7 +203,7 @@ class EmbedFonts:
                 rule = sheet.cssRules[0]
                 page_sheet = self.get_page_sheet()
                 href = page_sheet.abshref(item.href)
-                rule.style.setProperty('src', 'url(%s)' % href)
+                rule.style.setProperty('src', f'url({href})')
                 ff_rules.append(find_font_face_rules(sheet, self.oeb)[0])
                 page_sheet.data.insertRule(rule, len(page_sheet.data.cssRules))
 
@@ -229,7 +228,7 @@ class EmbedFonts:
             name = f['full_name']
             ext = 'otf' if f['is_otf'] else 'ttf'
             name = ascii_filename(name).replace(' ', '-').replace('(', '').replace(')', '')
-            fid, href = self.oeb.manifest.generate(id='font', href='fonts/%s.%s'%(name, ext))
+            fid, href = self.oeb.manifest.generate(id='font', href=f'fonts/{name}.{ext}')
             item = self.oeb.manifest.add(fid, href, guess_type('dummy.'+ext)[0], data=data)
             item.unload_data_from_memory()
             page_sheet = self.get_page_sheet()

@@ -2,13 +2,11 @@
 # License: GPLv3 Copyright: 2011, Kovid Goyal <kovid at kovidgoyal.net>
 
 
-from qt.core import (QDialog, QLabel, QVBoxLayout, QDialogButtonBox,
-        QProgressBar, QSize, QTimer, pyqtSignal, Qt)
+from qt.core import QDialog, QDialogButtonBox, QLabel, QProgressBar, QSize, Qt, QTimer, QVBoxLayout, pyqtSignal
 
-from calibre.gui2 import (error_dialog, question_dialog, warning_dialog,
-    info_dialog)
 from calibre import force_unicode
 from calibre.constants import filesystem_encoding
+from calibre.gui2 import error_dialog, info_dialog, question_dialog, warning_dialog
 
 
 class DBRestore(QDialog):
@@ -20,7 +18,7 @@ class DBRestore(QDialog):
         self.l = QVBoxLayout()
         self.setLayout(self.l)
         self.l1 = QLabel('<b>'+_('Restoring database from backups, do not'
-            ' interrupt, this will happen in three stages')+'...')
+            ' interrupt, this will happen in multiple stages')+'...')
         self.setWindowTitle(_('Restoring database'))
         self.l.addWidget(self.l1)
         self.pb = QProgressBar(self)
@@ -99,7 +97,7 @@ def restore_database(db, parent=None):
             _('Your list of books, with all their metadata is '
                 'stored in a single file, called a database. '
                 'In addition, metadata for each individual '
-                'book is stored in that books\' folder, as '
+                "book is stored in that books' folder, as "
                 'a backup.'
                 '<p>This operation will rebuild '
                 'the database from the individual book '
